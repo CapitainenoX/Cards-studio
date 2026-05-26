@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduCards Studio Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600&display=swap');
+        
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #ffffff; color: #1a1a1a; }
+
+        .card-fixed-size {
+            width: 320px;
+            height: 450px;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            position: relative;
+            padding: 24px;
+            transition: all 0.2s ease;
+        }
+
+        .upside-down { transform: rotate(180deg); }
+
+        @page {
+            margin: 0;
+            size: A4;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { margin: 0 !important; padding: 0 !important; }
+            main { margin: 0 !important; padding: 0 !important; }
+            #deck { 
+                display: grid !important; 
+                grid-template-columns: repeat(3, 60mm) !important; 
+                gap: 10mm !important;
+                margin: 0 !important;
+                padding: 5mm 5mm !important;
+                width: fit-content !important;
+                margin-left: auto !important;
+                margin-right: auto !important;
+                grid-auto-flow: dense !important;
+            }
+            .card-container { 
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+            }
+            .card-container:nth-child(9n+10) { 
+                page-break-before: always !important;
+                break-before: page !important;
+            }
+            .card-fixed-size { 
+                width: 60mm !important;
+                height: 85mm !important;
+                box-shadow: none !important;
+                break-inside: avoid;
+                page-break-inside: avoid;
+                margin: 0 !important;
+                padding: 2.5mm !important;
+                box-sizing: border-box !important;
+                font-size: 9pt !important;
+                overflow: hidden;
+            }
+            .card-fixed-size > div {
+                font-size: 9pt !important;
+            }
+            .card-fixed-size img {
+                max-width: 100% !important;
+                max-height: 20mm !important;
+            }
+        }
+
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        
+        .card-container { transition: transform 0.3s ease; }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden">
+
+    <aside class="no-print w-80 h-full border-r border-gray-100 flex flex-col bg-white z-20">
+        <div class="p-8">
+            <h1 class="text-xl font-semibold tracking-tight flex items-center gap-2">
+                <span class="w-3 h-3 bg-indigo-600 rounded-full"></span> Studio Pro
+            </h1>
+            <p id="stats" class="text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-widest"></p>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-6 custom-scroll space-y-8">
+            <div class="space-y-2">
+                <button onclick="addCard()" class="w-full py-3 px-4 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Ajouter une carte
+                </button>
+                
+                <div class="relative mt-4">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-gray-400"></i>
+                    <input type="text" id="searchInput" oninput="render()" placeholder="Rechercher une carte..." class="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-100">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 pt-2">
+                    <button onclick="exportJSON()" class="py-2 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1">
+                        <i data-lucide="download" class="w-3 h-3"></i> JSON
+                    </button>
+                    <button onclick="exportCSV()" class="py-2 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1">
+                        <i data-lucide="table" class="w-3 h-3"></i> CSV
+                    </button>
+                    <button onclick="exportPNG()" class="py-2 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1">
+                        <i data-lucide="image" class="w-3 h-3"></i> PNG
+                    </button>
+                    <button onclick="document.getElementById('importFile').click()" class="py-2 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1 col-span-2">
+                        <i data-lucide="upload" class="w-3 h-3"></i> Importer un deck
+                    </button>
+                </div>
+                <input type="file" id="importFile" class="hidden" accept=".json" onchange="importJSON(event)">
+            </div>
+
+            <div class="space-y-4">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Design Global</p>
+                <div class="space-y-5">
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-gray-500">Couleur Bordure</span>
+                        <input type="color" id="globalBorderColor" value="#e2e8f0" onchange="render()" class="w-6 h-6 rounded-full cursor-pointer">
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Épaisseur</span>
+                            <span id="borderVal" class="font-bold text-indigo-600">1px</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="adjustSlider('globalBorderSize', -1)" class="p-1 bg-gray-100 rounded-md hover:bg-gray-200 text-xs">-</button>
+                            <input type="range" id="globalBorderSize" min="0" max="10" value="1" oninput="render()" class="flex-1 accent-indigo-600">
+                            <button onclick="adjustSlider('globalBorderSize', 1)" class="p-1 bg-gray-100 rounded-md hover:bg-gray-200 text-xs">+</button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>Coins arrondis</span>
+                            <span id="radiusVal" class="font-bold text-indigo-600">16px</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="adjustSlider('globalRadius', -2)" class="p-1 bg-gray-100 rounded-md hover:bg-gray-200 text-xs">-</button>
+                            <input type="range" id="globalRadius" min="0" max="80" value="16" oninput="render()" class="flex-1 accent-indigo-600">
+                            <button onclick="adjustSlider('globalRadius', 2)" class="p-1 bg-gray-100 rounded-md hover:bg-gray-200 text-xs">+</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="clearAll()" class="w-full py-2 text-red-400 hover:text-red-600 text-[10px] font-bold uppercase tracking-tighter transition">Effacer tout le deck</button>
+        </div>
+
+        <div class="p-6">
+            <button onclick="window.print()" class="w-full py-3 bg-black text-white rounded-xl text-sm font-bold hover:bg-gray-800 transition shadow-lg flex items-center justify-center gap-2">
+                <i data-lucide="printer" class="w-4 h-4"></i> Imprimer (3/ligne)
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 bg-[#fcfcfc] overflow-y-auto p-12 custom-scroll">
+        <div id="deck" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+            </div>
+    </main>
+
+    <div id="editor" class="no-print fixed right-0 top-0 h-full w-[400px] bg-white shadow-2xl translate-x-full transition-transform duration-300 ease-in-out z-30 flex flex-col border-l border-gray-100">
+        <div class="p-6 border-b flex justify-between items-center bg-gray-50">
+            <h2 class="font-semibold">Personnalisation</h2>
+            <button onclick="closeEditor()" class="p-2 hover:bg-gray-200 rounded-full transition"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+        <div id="editorContent" class="p-8 space-y-6 overflow-y-auto flex-1 custom-scroll"></div>
+    </div>
+
+    <script>
+
+        let cards = JSON.parse(localStorage.getItem('edu_pro_cards_v2')) || [];
+        let activeId = null;
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let globalTitle = localStorage.getItem('edu_pro_title') || 'Scientifique card';
+
+        function addCard() {
+            const card = {
+                id: Date.now(),
+                question: "Nouvelle Question",
+                type: "multiple",
+                options: "Option 1\nOption 2",
+                answer: "La réponse ici",
+                image: null,
+                bgColor: '#ffffff',
+                styleQ: { size: 18, color: '#1a1a1a', weight: 'bold', italic: false, underline: false },
+                styleA: { size: 12, color: '#6366f1', weight: 'bold', italic: false, underline: false },
+                styleTitle: { size: 16, color: '#1a1a1a', weight: 'bold', italic: false, underline: false },
+                styleOptions: { size: 10, color: '#666666', weight: 'normal', italic: false, underline: false },
+                imgSize: 100,
+                title: globalTitle
+            };
+            cards.push(card);
+            render();
+            save();
+        }
+
+        function duplicateCard(id) {
+            const original = cards.find(c => c.id === id);
+            const copy = JSON.parse(JSON.stringify(original));
+            copy.id = Date.now();
+            const index = cards.findIndex(c => c.id === id);
+            cards.splice(index + 1, 0, copy);
+            render();
+            save();
+        }
+
+        function moveCard(id, direction) {
+            const index = cards.findIndex(c => c.id === id);
+            if (direction === 'up' && index > 0) {
+                [cards[index], cards[index - 1]] = [cards[index - 1], cards[index]];
+            } else if (direction === 'down' && index < cards.length - 1) {
+                [cards[index], cards[index + 1]] = [cards[index + 1], cards[index]];
+            }
+            render();
+            save();
+        }
+
+        function adjustSlider(id, delta) {
+            const slider = document.getElementById(id);
+            slider.value = parseInt(slider.value) + delta;
+            render();
+        }
+
+        function render() {
+            const container = document.getElementById('deck');
+            const radius = document.getElementById('globalRadius').value;
+            const borderCol = document.getElementById('globalBorderColor').value;
+            const borderSize = document.getElementById('globalBorderSize').value;
+            const search = document.getElementById('searchInput').value.toLowerCase();
+
+            // Mise à jour des labels
+            document.getElementById('radiusVal').innerText = radius + 'px';
+            document.getElementById('borderVal').innerText = borderSize + 'px';
+            document.getElementById('stats').innerText = `${cards.length} Cartes | ~${Math.ceil(cards.length * 0.5)} min de lecture`;
+
+            container.innerHTML = '';
+
+            const filteredCards = cards.filter(c => 
+                c.question.toLowerCase().includes(search) || 
+                c.answer.toLowerCase().includes(search)
+            );
+
+            filteredCards.forEach((card, index) => {
+                const cardEl = document.createElement('div');
+                cardEl.className = 'card-container group relative';
+                // Style dynamique de la carte
+                const innerStyle = `
+                    border-radius: ${radius}px; 
+                    border: ${borderSize}px solid ${borderCol};
+                    background-color: ${card.bgColor || '#ffffff'};
+                `;
+
+                let optionsHtml = '';
+                if(card.type === 'multiple') {
+                    const lines = card.options.split('\n').filter(l => l.trim() !== '');
+                    optionsHtml = lines.map((l, i) => `<div style="font-size: ${(card.styleOptions?.size || 10)}px; color: ${card.styleOptions?.color || '#666666'}; font-weight: ${card.styleOptions?.weight === 'bold' ? '700' : '400'}; font-style: ${card.styleOptions?.italic ? 'italic' : 'normal'}; text-decoration: ${card.styleOptions?.underline ? 'underline' : 'none'};" class="text-left w-full px-4">${alphabet[i]}) ${l}</div>`).join('');
+                } else {
+                    optionsHtml = `<div class="italic" style="font-size: ${(card.styleOptions?.size || 10)}px; color: ${card.styleOptions?.color || '#666666'};">Vrai ou Faux ?</div>`;
+                }
+
+                cardEl.innerHTML = `
+                    <div class="no-print absolute -top-4 left-1/2 -translate-x-1/2 flex gap-2 opacity-0 group-hover:opacity-100 transition-all z-10">
+                        <button onclick="moveCard(${card.id}, 'up')" class="p-2 bg-white shadow-xl rounded-full hover:text-indigo-600"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                        <button onclick="duplicateCard(${card.id})" class="p-2 bg-white shadow-xl rounded-full hover:text-green-600"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                        <button onclick="moveCard(${card.id}, 'down')" class="p-2 bg-white shadow-xl rounded-full hover:text-indigo-600"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                    </div>
+                    <div onclick="openEditor(${card.id})" class="card-fixed-size shadow-sm hover:shadow-xl cursor-pointer mx-auto" style="${innerStyle}">
+                        <div class="w-full text-center mb-2" style="font-size: ${(card.styleTitle?.size || 16)}px; color: ${card.styleTitle?.color || '#1a1a1a'}; font-weight: ${card.styleTitle?.weight === 'bold' ? '700' : '400'}; font-style: ${card.styleTitle?.italic ? 'italic' : 'normal'}; text-decoration: ${card.styleTitle?.underline ? 'underline' : 'none'};">${card.title || globalTitle}</div>
+                        <div class="flex-1 flex flex-col items-center gap-4 text-center overflow-hidden">
+                            ${card.image ? `<img src="${card.image}" style="width: ${card.imgSize}%" class="max-h-64 object-contain rounded-lg">` : ''}
+                            <div style="font-size: ${card.styleQ.size}px; color: ${card.styleQ.color}; font-weight: ${card.styleQ.weight === 'bold' ? '700' : '400'}; font-style: ${card.styleQ.italic ? 'italic' : 'normal'}; text-decoration: ${card.styleQ.underline ? 'underline' : 'none'}">
+                                ${card.question}
+                            </div>
+                            <div class="w-full flex flex-col gap-1 mt-2">
+                                ${optionsHtml}
+                            </div>
+                        </div>
+                        <div class="mt-auto pt-6 border-t border-gray-50 flex flex-col items-center">
+                            <div class="upside-down text-center" style="font-size: ${card.styleA.size}px; color: ${card.styleA.color}; font-weight: ${card.styleA.weight === 'bold' ? '700' : '400'}; font-style: ${card.styleA.italic ? 'italic' : 'normal'}; text-decoration: ${card.styleA.underline ? 'underline' : 'none'}">
+                                ${card.answer}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(cardEl);
+            });
+            lucide.createIcons();
+        }
+
+        function openEditor(id) {
+            activeId = id;
+            const card = cards.find(c => c.id === id);
+            
+            // Initialiser les objets de style manquants
+            if (!card.styleQ) card.styleQ = { size: 18, color: '#1a1a1a', weight: 'bold', italic: false, underline: false };
+            if (!card.styleA) card.styleA = { size: 12, color: '#6366f1', weight: 'bold', italic: false, underline: false };
+            if (!card.styleTitle) card.styleTitle = { size: 16, color: '#1a1a1a', weight: 'bold', italic: false, underline: false };
+            if (!card.styleOptions) card.styleOptions = { size: 10, color: '#666666', weight: 'normal', italic: false, underline: false };
+            
+            const editor = document.getElementById('editor');
+            editor.classList.remove('translate-x-full');
+
+            document.getElementById('editorContent').innerHTML = `
+                <div class="space-y-8">
+                    <div class="p-4 bg-gray-50 rounded-xl space-y-4">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Apparence de la carte</label>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs">Fond de carte</span>
+                            <input type="color" value="${card.bgColor || '#ffffff'}" onchange="updateProp('bgColor', this.value)" class="w-8 h-8 rounded cursor-pointer border-none">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-xs flex justify-between">Image <span>${card.imgSize}%</span></label>
+                            <input type="file" onchange="uploadImg(event)" class="text-xs w-full">
+                            <div class="flex items-center gap-2">
+                                <button onclick="adjustEditorSlider('imgSize', -5)" class="p-1 bg-white border rounded shadow-sm">-</button>
+                                <input type="range" min="30" max="100" value="${card.imgSize}" oninput="updateProp('imgSize', this.value)" class="flex-1 accent-indigo-600">
+                                <button onclick="adjustEditorSlider('imgSize', 5)" class="p-1 bg-white border rounded shadow-sm">+</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Titre</label>
+                        <input type="text" value="${card.title || globalTitle}" oninput="updateProp('title', this.value)" class="w-full border p-3 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
+                        <div class="flex items-center gap-2">
+                            ${renderStyleButtons(card.styleTitle, 'styleTitle')}
+                            <div class="flex items-center border rounded px-1 ml-auto">
+                                <button onclick="adjustStyleSlider('styleTitle', 'size', -1)" class="p-1 text-xs">-</button>
+                                <span class="w-8 text-center text-xs font-bold">${card.styleTitle?.size || 16}px</span>
+                                <button onclick="adjustStyleSlider('styleTitle', 'size', 1)" class="p-1 text-xs">+</button>
+                            </div>
+                            <input type="color" value="${card.styleTitle?.color || '#1a1a1a'}" onchange="updateStyle('styleTitle', 'color', this.value)" class="w-8 h-8 rounded cursor-pointer border-none">
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Question</label>
+                        <textarea oninput="updateProp('question', this.value)" class="w-full border p-3 rounded-lg text-sm h-20 outline-none focus:ring-2 focus:ring-indigo-100">${card.question}</textarea>
+                        <div class="flex items-center gap-2">
+                            ${renderStyleButtons(card.styleQ, 'styleQ')}
+                            <div class="flex items-center border rounded px-1 ml-auto">
+                                <button onclick="adjustStyleSlider('styleQ', 'size', -1)" class="p-1 text-xs">-</button>
+                                <span class="w-8 text-center text-xs font-bold">${card.styleQ.size}px</span>
+                                <button onclick="adjustStyleSlider('styleQ', 'size', 1)" class="p-1 text-xs">+</button>
+                            </div>
+                            <input type="color" value="${card.styleQ.color}" onchange="updateStyle('styleQ', 'color', this.value)" class="w-8 h-8 rounded cursor-pointer border-none">
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Options/Choix</label>
+                        <div class="flex items-center gap-2">
+                            ${renderStyleButtons(card.styleOptions, 'styleOptions')}
+                            <div class="flex items-center border rounded px-1 ml-auto">
+                                <button onclick="adjustStyleSlider('styleOptions', 'size', -1)" class="p-1 text-xs">-</button>
+                                <span class="w-8 text-center text-xs font-bold">${card.styleOptions?.size || 10}px</span>
+                                <button onclick="adjustStyleSlider('styleOptions', 'size', 1)" class="p-1 text-xs">+</button>
+                            </div>
+                            <input type="color" value="${card.styleOptions?.color || '#666666'}" onchange="updateStyle('styleOptions', 'color', this.value)" class="w-8 h-8 rounded cursor-pointer border-none">
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Type & Options</label>
+                        <select onchange="updateProp('type', this.value); openEditor(${id})" class="w-full border p-2 rounded-lg text-sm bg-white">
+                            <option value="multiple" ${card.type === 'multiple' ? 'selected' : ''}>Choix Multiples</option>
+                            <option value="boolean" ${card.type === 'boolean' ? 'selected' : ''}>Vrai / Faux</option>
+                        </select>
+                        ${card.type === 'multiple' ? `
+                            <textarea oninput="updateProp('options', this.value)" placeholder="Une option par ligne..." class="w-full border p-3 rounded-lg text-xs font-mono h-24 outline-none focus:ring-2 focus:ring-indigo-100">${card.options}</textarea>
+                        ` : ''}
+                    </div>
+
+                    <div class="space-y-3">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Réponse</label>
+                        <input type="text" value="${card.answer}" oninput="updateProp('answer', this.value)" class="w-full border p-3 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
+                        <div class="flex items-center gap-2">
+                            ${renderStyleButtons(card.styleA, 'styleA')}
+                            <div class="flex items-center border rounded px-1 ml-auto">
+                                <button onclick="adjustStyleSlider('styleA', 'size', -1)" class="p-1 text-xs">-</button>
+                                <span class="w-8 text-center text-xs font-bold">${card.styleA.size}px</span>
+                                <button onclick="adjustStyleSlider('styleA', 'size', 1)" class="p-1 text-xs">+</button>
+                            </div>
+                            <input type="color" value="${card.styleA.color}" onchange="updateStyle('styleA', 'color', this.value)" class="w-8 h-8 rounded cursor-pointer border-none">
+                        </div>
+                    </div>
+
+                    <button onclick="deleteCard(${id})" class="w-full py-3 text-red-500 bg-red-50 rounded-xl text-xs font-bold hover:bg-red-100 transition mt-10">Supprimer la carte</button>
+                </div>
+            `;
+            lucide.createIcons();
+        }
+
+        // Helpers pour l'éditeur (Boutons +/-)
+        function adjustEditorSlider(prop, delta) {
+            const card = cards.find(c => c.id === activeId);
+            if (prop === 'imgSize') {
+                card[prop] = Math.max(10, Math.min(200, parseInt(card[prop]) + delta));
+            } else {
+                card[prop] = Math.max(10, Math.min(100, parseInt(card[prop]) + delta));
+            }
+            openEditor(activeId);
+            render();
+            save();
+        }
+
+        function adjustStyleSlider(target, prop, delta) {
+            const card = cards.find(c => c.id === activeId);
+            if (!card[target]) card[target] = { size: 12, color: '#000000', weight: 'normal', italic: false, underline: false };
+            const currentVal = parseInt(card[target][prop]) || 12;
+            card[target][prop] = Math.max(8, Math.min(48, currentVal + delta));
+            openEditor(activeId);
+            render();
+            save();
+        }
+
+
+        function renderStyleButtons(styleObj, target) {
+            if (!styleObj) styleObj = { size: 12, color: '#000000', weight: 'normal', italic: false, underline: false };
+            return `
+                <div class="flex gap-1">
+                    <button onclick="toggleStyle('${target}', 'weight')" class="p-2 border rounded ${styleObj.weight === 'bold' ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="bold" class="w-3 h-3"></i></button>
+                    <button onclick="toggleStyle('${target}', 'italic')" class="p-2 border rounded ${styleObj.italic ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="italic" class="w-3 h-3"></i></button>
+                    <button onclick="toggleStyle('${target}', 'underline')" class="p-2 border rounded ${styleObj.underline ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="underline" class="w-3 h-3"></i></button>
+                </div>
+            `;
+        }
+
+        function updateProp(key, val) {
+            const card = cards.find(c => c.id === activeId);
+            if (key === 'imgSize') {
+                card[key] = Math.max(10, Math.min(200, parseInt(val)));
+            } else {
+                card[key] = val;
+            }
+            render();
+            save();
+        }
+
+        function updateStyle(target, prop, val) {
+            const card = cards.find(c => c.id === activeId);
+            if (!card[target]) card[target] = {};
+            if (prop === 'size') {
+                card[target][prop] = Math.max(8, Math.min(48, parseInt(val)));
+            } else {
+                card[target][prop] = val;
+            }
+            render();
+            save();
+        }
+
+        function toggleStyle(target, prop) {
+            const card = cards.find(c => c.id === activeId);
+            if (!card[target]) card[target] = {};
+            if (prop === 'weight') card[target][prop] = card[target][prop] === 'bold' ? 'normal' : 'bold';
+            else card[target][prop] = !card[target][prop];
+            openEditor(activeId);
+            render();
+            save();
+        }
+
+        function uploadImg(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                updateProp('image', reader.result);
+                openEditor(activeId);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function deleteCard(id) {
+            if(confirm("Supprimer cette carte ?")) {
+                cards = cards.filter(c => c.id !== id);
+                closeEditor();
+                render();
+                save();
+            }
+        }
+
+        function clearAll() {
+            if(confirm("Attention : Cela va effacer TOUTES les cartes. Continuer ?")) {
+                cards = [];
+                render();
+                save();
+            }
+        }
+
+        function closeEditor() { 
+            document.getElementById('editor').classList.add('translate-x-full'); 
+            activeId = null; 
+        }
+
+        function save() { 
+            localStorage.setItem('edu_pro_cards_v2', JSON.stringify(cards)); 
+        }
+
+        function exportJSON() {
+            const dataStr = JSON.stringify(cards, null, 2);
+            const blob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `deck-export-${new Date().toLocaleDateString()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportCSV() {
+            let csv = "Question,Type,Options,Reponse\n";
+            cards.forEach(c => {
+                csv += `"${c.question.replace(/"/g, '""')}","${c.type}","${c.options.replace(/\n/g, ' | ')}","${c.answer.replace(/"/g, '""')}"\n`;
+            });
+            const blob = new Blob([csv], {type: 'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'deck-flashcards.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportPNG() {
+            const container = document.getElementById('deck');
+            const originalDisplay = container.style.display;
+            
+            // Créer un conteneur temporaire pour le rendu avec marge gauche
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.left = '-9999px';
+            tempDiv.style.width = 'auto';
+            tempDiv.style.height = 'auto';
+            tempDiv.style.background = '#ffffff';
+            tempDiv.style.padding = '5mm 10mm';
+            tempDiv.style.display = 'flex';
+            tempDiv.style.flexDirection = 'column';
+            
+            // Wrapper pour chaque page de cartes (3x3)
+            let pageWrapper = null;
+            let cardCount = 0;
+            
+            cards.forEach((card, index) => {
+                if (cardCount % 9 === 0) {
+                    pageWrapper = document.createElement('div');
+                    pageWrapper.style.display = 'grid';
+                    pageWrapper.style.gridTemplateColumns = 'repeat(3, 60mm)';
+                    pageWrapper.style.gap = '10mm';
+                    pageWrapper.style.marginBottom = '20mm';
+                    tempDiv.appendChild(pageWrapper);
+                }
+                
+                const cardClone = container.querySelector(`[onclick="openEditor(${card.id})"]`)?.parentElement?.cloneNode(true);
+                if (cardClone && pageWrapper) {
+                    const cardEl = cardClone.querySelector('.card-fixed-size');
+                    if (cardEl) {
+                        cardEl.style.width = '60mm';
+                        cardEl.style.height = '85mm';
+                        cardEl.style.margin = '0';
+                        cardEl.style.padding = '3mm';
+                    }
+                    pageWrapper.appendChild(cardClone);
+                    cardCount++;
+                }
+            });
+            
+            document.body.appendChild(tempDiv);
+            
+            html2canvas(tempDiv, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff',
+                windowWidth: 220 * 96 / 25.4
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = `deck-cards-${new Date().toLocaleDateString()}.png`;
+                link.click();
+                document.body.removeChild(tempDiv);
+            }).catch(err => {
+                console.error('Erreur export PNG:', err);
+                alert('Erreur lors de l\'export PNG');
+                document.body.removeChild(tempDiv);
+            });
+        }
+
+        function importJSON(e) {
+            const reader = new FileReader();
+            reader.onload = (ev) => { 
+                try {
+                    const imported = JSON.parse(ev.target.result);
+                    cards = imported;
+                    render();
+                    save();
+                } catch(err) { alert("Erreur lors de l'importation du fichier."); }
+            };
+            reader.readAsText(e.target.files[0]);
+        }
+
+        window.onload = () => { 
+            if(cards.length === 0) addCard(); 
+            render(); 
+        };
+    </script>
+</body>
+</html>
