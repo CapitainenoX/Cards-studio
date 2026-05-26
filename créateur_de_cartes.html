@@ -239,9 +239,14 @@
                     <i data-lucide="plus" class="w-4 h-4"></i> Ajouter une carte
                 </button>
 
-                <button data-tutorial="autoscale" onclick="autoRescaleAll()" class="w-full py-2.5 px-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:opacity-95 transition flex items-center justify-center gap-2 shadow-sm">
-                    <i data-lucide="wand-2" class="w-4 h-4"></i> Auto-ajuster (pro)
-                </button>
+                <div class="grid grid-cols-2 gap-2">
+                    <button data-tutorial="autoscale" onclick="autoRescaleAll()" class="py-2.5 px-3 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:opacity-95 transition flex items-center justify-center gap-1.5 shadow-sm">
+                        <i data-lucide="wand-2" class="w-4 h-4"></i> Auto-ajuster
+                    </button>
+                    <button data-tutorial="study" onclick="openStudyMode()" class="py-2.5 px-3 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-black transition flex items-center justify-center gap-1.5 shadow-sm">
+                        <i data-lucide="graduation-cap" class="w-4 h-4"></i> Étudier
+                    </button>
+                </div>
 
                 <div class="relative mt-3">
                     <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-gray-500" aria-hidden="true"></i>
@@ -328,28 +333,40 @@
 
         <!-- PRINT CTA -->
         <div class="p-5 lg:p-6 border-t border-gray-100" data-tutorial="print">
-            <button onclick="printDeck()" class="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-black transition shadow-lg flex items-center justify-center gap-2">
-                <i data-lucide="printer" class="w-4 h-4"></i> Imprimer (3/ligne)
+            <button onclick="openPrintOptions()" class="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-black transition shadow-lg flex items-center justify-center gap-2">
+                <i data-lucide="printer" class="w-4 h-4"></i> Imprimer / PDF
             </button>
-            <p class="text-[10px] text-gray-500 text-center mt-2">A4 · 9 cartes/page · prêt à découper</p>
+            <p class="text-[10px] text-gray-500 text-center mt-2">A4 · 9 cartes/page · options de format</p>
         </div>
     </aside>
 
     <!-- ============ MAIN ============ -->
     <main class="flex-1 bg-[#fafafa] overflow-y-auto p-4 sm:p-6 lg:p-10 custom-scroll">
         <div id="empty-state" class="hidden">
-            <div class="max-w-xl mx-auto text-center py-12 px-6 empty-illust rounded-3xl">
+            <div class="max-w-2xl mx-auto text-center py-12 px-6 empty-illust rounded-3xl">
                 <div class="w-16 h-16 mx-auto mb-4 bg-white rounded-2xl shadow-sm flex items-center justify-center">
                     <i data-lucide="sparkles" class="w-8 h-8 text-indigo-600"></i>
                 </div>
                 <h2 class="text-2xl font-bold mb-2">Bienvenue dans EduCards</h2>
                 <p class="text-gray-600 mb-6">Créez, personnalisez et imprimez vos flashcards pédagogiques.</p>
-                <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                <div class="flex flex-col sm:flex-row gap-3 justify-center mb-8">
                     <button onclick="startTutorial()" class="px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold hover:bg-gray-50 transition flex items-center justify-center gap-2">
                         <i data-lucide="play" class="w-4 h-4"></i> Démarrer le tour
                     </button>
                     <button onclick="addCard()" class="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition flex items-center justify-center gap-2">
-                        <i data-lucide="plus" class="w-4 h-4"></i> Créer ma première carte
+                        <i data-lucide="plus" class="w-4 h-4"></i> Carte vierge
+                    </button>
+                </div>
+                <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-3">Ou démarrez avec un modèle</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button onclick="loadTemplate('sciences')" class="px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-semibold hover:border-indigo-300 hover:bg-indigo-50 transition flex items-center justify-center gap-2">
+                        <i data-lucide="flask-conical" class="w-4 h-4 text-indigo-600"></i> Sciences
+                    </button>
+                    <button onclick="loadTemplate('histoire')" class="px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-semibold hover:border-indigo-300 hover:bg-indigo-50 transition flex items-center justify-center gap-2">
+                        <i data-lucide="scroll" class="w-4 h-4 text-indigo-600"></i> Histoire
+                    </button>
+                    <button onclick="loadTemplate('vocab')" class="px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-semibold hover:border-indigo-300 hover:bg-indigo-50 transition flex items-center justify-center gap-2">
+                        <i data-lucide="languages" class="w-4 h-4 text-indigo-600"></i> Vocabulaire EN
                     </button>
                 </div>
             </div>
@@ -373,6 +390,116 @@
         <div id="editorContent" class="p-6 space-y-6 overflow-y-auto flex-1 custom-scroll"></div>
     </div>
 </div>
+
+<!-- ============ STUDY MODE ============ -->
+<div id="study-overlay" class="no-print fixed inset-0 z-[95] bg-gray-900/95 backdrop-blur-sm hidden flex-col" role="dialog" aria-modal="true" aria-labelledby="studyTitle">
+    <div class="flex items-center justify-between p-4 text-white">
+        <div class="flex items-center gap-3">
+            <h2 id="studyTitle" class="font-bold text-lg">Mode étude</h2>
+            <span id="studyProgress" class="text-sm text-gray-300 font-medium"></span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="studyShuffle" aria-label="Mélanger" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm font-semibold flex items-center gap-1.5">
+                <i data-lucide="shuffle" class="w-4 h-4"></i><span class="hidden sm:inline">Mélanger</span>
+            </button>
+            <button id="studyToggleAnswer" aria-label="Masquer/Afficher réponse" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm font-semibold flex items-center gap-1.5">
+                <i data-lucide="eye-off" class="w-4 h-4"></i><span class="hidden sm:inline">Verso</span>
+            </button>
+            <button id="studyExit" aria-label="Quitter" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm font-semibold flex items-center gap-1.5">
+                <i data-lucide="x" class="w-4 h-4"></i><span class="hidden sm:inline">Quitter</span>
+            </button>
+        </div>
+    </div>
+    <div class="flex-1 flex items-center justify-center px-4 pb-4">
+        <div id="studyCardWrap" class="relative w-full max-w-md aspect-[320/450]" style="perspective:1200px;">
+            <div id="studyCardInner" style="position:absolute;inset:0;transition:transform .6s;transform-style:preserve-3d;">
+                <div id="studyFront" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:white;border-radius:20px;padding:32px;display:flex;flex-direction:column;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.4);"></div>
+                <div id="studyBack" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:#1e1b4b;color:white;border-radius:20px;padding:32px;display:flex;align-items:center;justify-content:center;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.4);transform:rotateY(180deg);"></div>
+            </div>
+        </div>
+    </div>
+    <div class="flex items-center justify-center gap-3 pb-6 px-4">
+        <button id="studyPrev" aria-label="Précédente" class="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white">
+            <i data-lucide="chevron-left" class="w-5 h-5"></i>
+        </button>
+        <button id="studyFlipBtn" class="px-6 py-3 rounded-xl bg-white text-gray-900 font-bold hover:bg-gray-100 flex items-center gap-2">
+            <i data-lucide="repeat" class="w-4 h-4"></i> Retourner
+        </button>
+        <button id="studyNext" aria-label="Suivante" class="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white">
+            <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </button>
+    </div>
+    <p class="text-center text-xs text-gray-400 pb-4">Espace/clic = retourner · ←/→ = naviguer · ESC = quitter</p>
+</div>
+
+<!-- ============ PRINT OPTIONS ============ -->
+<div id="print-options-backdrop" class="no-print modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="printOptTitle">
+    <div class="modal-content">
+        <h3 id="printOptTitle" class="text-lg font-bold mb-1">Options d'impression / PDF</h3>
+        <p class="text-sm text-gray-600 mb-5">Choisissez le format avant d'envoyer à l'imprimante.</p>
+        <div class="space-y-2 mb-5">
+            <label class="flex items-start gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50">
+                <input type="radio" name="printMode" value="both" checked class="mt-0.5 accent-indigo-600">
+                <div>
+                    <div class="font-semibold text-sm">Recto + verso (3×3)</div>
+                    <p class="text-xs text-gray-600">Question dessus, réponse renversée en bas — prêt à découper.</p>
+                </div>
+            </label>
+            <label class="flex items-start gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50">
+                <input type="radio" name="printMode" value="front" class="mt-0.5 accent-indigo-600">
+                <div>
+                    <div class="font-semibold text-sm">Recto seul (questions)</div>
+                    <p class="text-xs text-gray-600">Cache la réponse — pour interroger ou faire un quiz.</p>
+                </div>
+            </label>
+            <label class="flex items-start gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50">
+                <input type="radio" name="printMode" value="duplex" class="mt-0.5 accent-indigo-600">
+                <div>
+                    <div class="font-semibold text-sm">Recto/verso séparé (impression double-face)</div>
+                    <p class="text-xs text-gray-600">Page 1 : questions. Page 2 : réponses miroir alignées pour impression duplex.</p>
+                </div>
+            </label>
+        </div>
+        <div class="flex items-center gap-2 mb-5">
+            <label class="text-xs font-semibold text-gray-600">Action :</label>
+            <select id="printAction" class="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+                <option value="print">Imprimer</option>
+                <option value="pdf">Télécharger en PDF</option>
+            </select>
+        </div>
+        <div class="flex gap-3 justify-end">
+            <button id="printOptCancel" class="px-4 py-2 rounded-lg text-sm font-semibold border border-gray-200 hover:bg-gray-50">Annuler</button>
+            <button id="printOptGo" class="px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700">Lancer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============ SHORTCUTS HELP ============ -->
+<div id="shortcuts-backdrop" class="no-print modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+    <div class="modal-content">
+        <h3 id="shortcutsTitle" class="text-lg font-bold mb-4 flex items-center gap-2">
+            <i data-lucide="keyboard" class="w-5 h-5"></i> Raccourcis clavier
+        </h3>
+        <div class="space-y-1.5 text-sm">
+            <div class="flex justify-between py-1.5 border-b border-gray-100"><span class="text-gray-600">Nouvelle carte</span><kbd class="px-2 py-0.5 bg-gray-100 rounded text-xs font-mono">N</kbd></div>
+            <div class="flex justify-between py-1.5 border-b border-gray-100"><span class="text-gray-600">Rechercher</span><kbd class="px-2 py-0.5 bg-gray-100 rounded text-xs font-mono">/</kbd></div>
+            <div class="flex justify-between py-1.5 border-b border-gray-100"><span class="text-gray-600">Mode étude</span><kbd class="px-2 py-0.5 bg-gray-100 rounded text-xs font-mono">S</kbd></div>
+            <div class="flex justify-between py-1.5 border-b border-gray-100"><span class="text-gray-600">Imprimer / PDF</span><kbd class="px-2 py-0.5 bg-gray-100 rounded text-xs font-mono">P</kbd></div>
+            <div class="flex justify-between py-1.5 border-b border-gray-100"><span class="text-gray-600">Auto-ajuster tout</span><kbd class="px-2 py-0.5 bg-gray-100 rounded text-xs font-mono">A</kbd></div>
+            <div class="flex justify-between py-1.5 border-b border-gray-100"><span class="text-gray-600">Tutoriel</span><kbd class="px-2 py-0.5 bg-gray-100 rounded text-xs font-mono">T</kbd></div>
+            <div class="flex justify-between py-1.5 border-b border-gray-100"><span class="text-gray-600">Aide raccourcis</span><kbd class="px-2 py-0.5 bg-gray-100 rounded text-xs font-mono">?</kbd></div>
+            <div class="flex justify-between py-1.5"><span class="text-gray-600">Fermer panneau / annuler</span><kbd class="px-2 py-0.5 bg-gray-100 rounded text-xs font-mono">Échap</kbd></div>
+        </div>
+        <div class="flex justify-end mt-5">
+            <button id="shortcutsClose" class="px-4 py-2 rounded-lg text-sm font-semibold bg-gray-900 text-white hover:bg-black">Fermer</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============ FLOATING HELP ============ -->
+<button onclick="openShortcuts()" aria-label="Aide raccourcis clavier (?)" class="no-print fixed bottom-4 right-4 w-11 h-11 rounded-full bg-gray-900 text-white shadow-lg hover:bg-black hidden lg:flex items-center justify-center z-20" title="Raccourcis (?)">
+    <i data-lucide="keyboard" class="w-5 h-5"></i>
+</button>
 
 <!-- ============ DRAWER BACKDROP ============ -->
 <div id="sidebar-backdrop" class="no-print drawer-backdrop lg:hidden" onclick="closeSidebar()"></div>
@@ -1057,27 +1184,58 @@ function exportCSV() {
     toast(`CSV exporté (${cards.length} cartes)`, 'success');
 }
 
-async function renderCardsToPrintLayout() {
-    // Construit un layout offscreen pixel-perfect pour PNG/PDF (A4 = 210x297 mm)
-    const PX_PER_MM = 3.7795275591; // 96 dpi
+function buildCardHTML(card, { side = 'both', mirrored = false } = {}) {
+    ensureStyles(card);
+    const titleText = card.title?.trim() || settings.globalTitle;
+    const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+    const optionsHtml = card.type === 'multiple'
+        ? lines.map((l, i) => `<div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-align:left;line-height:1.3;"><b>${ALPHABET[i] || '•'})</b> ${escapeHtml(l)}</div>`).join('')
+        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;color:${card.styleOptions.color};">Vrai ou Faux ?</div>`;
+
+    const front = `
+        <div style="text-align:center;margin-bottom:4px;font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};line-height:1.2;">${escapeHtml(titleText)}</div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;overflow:hidden;">
+            ${card.image ? `<img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:40%;object-fit:contain;">` : ''}
+            <div style="font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};line-height:1.25;">${escapeHtml(card.question)}</div>
+            <div style="display:flex;flex-direction:column;gap:2px;width:100%;padding:0 4px;">${optionsHtml}</div>
+        </div>`;
+
+    const answerInline = `
+        <div style="margin-top:auto;padding-top:4px;border-top:1px solid #eee;text-align:center;">
+            <div style="transform:rotate(180deg);font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};">${escapeHtml(card.answer)}</div>
+        </div>`;
+
+    const answerFull = `
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;">
+            <div style="font-size:10px;color:#9ca3af;letter-spacing:.1em;text-transform:uppercase;font-weight:700;">Réponse</div>
+            <div style="font-size:${Math.max(14, card.styleA.size + 4)}px;color:${card.styleA.color};font-weight:700;line-height:1.3;">${escapeHtml(card.answer)}</div>
+            <div style="font-size:10px;color:#9ca3af;margin-top:8px;">${escapeHtml(titleText)}</div>
+        </div>`;
+
+    if (side === 'front') return front;
+    if (side === 'answer') return answerFull;
+    return front + answerInline;
+}
+
+async function renderCardsToPrintLayout(mode = 'both') {
+    const PX_PER_MM = 3.7795275591;
     const A4_W = 210 * PX_PER_MM;
     const A4_H = 297 * PX_PER_MM;
     const CARD_W = 60 * PX_PER_MM;
     const CARD_H = 85 * PX_PER_MM;
 
-    const pages = [];
     const groups = [];
     for (let i = 0; i < cards.length; i += 9) groups.push(cards.slice(i, i + 9));
 
     const root = document.createElement('div');
     root.style.cssText = `position:fixed;left:-99999px;top:0;background:white;font-family:'Plus Jakarta Sans',sans-serif;`;
     document.body.appendChild(root);
+    const pages = [];
 
-    for (const group of groups) {
+    const buildPage = (group, side, mirrored) => {
         const page = document.createElement('div');
         page.style.cssText = `
-            width:${A4_W}px;height:${A4_H}px;
-            background:white;
+            width:${A4_W}px;height:${A4_H}px;background:white;
             display:grid;
             grid-template-columns:repeat(3, ${CARD_W}px);
             grid-auto-rows:${CARD_H}px;
@@ -1085,16 +1243,26 @@ async function renderCardsToPrintLayout() {
             justify-content:center;align-content:start;
             padding:${10*PX_PER_MM}px 0;
             box-sizing:border-box;
+            page-break-after:always;break-after:page;
         `;
-        group.forEach(card => {
-            ensureStyles(card);
-            const titleText = card.title?.trim() || settings.globalTitle;
-            const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
-            const optionsHtml = card.type === 'multiple'
-                ? lines.map((l, i) => `<div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-align:left;line-height:1.3;"><b>${ALPHABET[i] || '•'})</b> ${escapeHtml(l)}</div>`).join('')
-                : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;color:${card.styleOptions.color};">Vrai ou Faux ?</div>`;
-
+        // For mirrored (duplex back), reorder by row to flip columns: 0,1,2 → 2,1,0 etc.
+        let ordered = group.slice();
+        while (ordered.length < 9) ordered.push(null); // pad to 9 for consistent grid
+        if (mirrored) {
+            const reordered = [];
+            for (let r = 0; r < 3; r++) {
+                const row = ordered.slice(r * 3, r * 3 + 3);
+                reordered.push(...row.reverse());
+            }
+            ordered = reordered;
+        }
+        ordered.forEach(card => {
             const div = document.createElement('div');
+            if (!card) {
+                div.style.cssText = `width:${CARD_W}px;height:${CARD_H}px;background:transparent;`;
+                page.appendChild(div);
+                return;
+            }
             div.style.cssText = `
                 width:${CARD_W}px;height:${CARD_H}px;
                 background:${card.bgColor};
@@ -1105,23 +1273,24 @@ async function renderCardsToPrintLayout() {
                 display:flex;flex-direction:column;
                 overflow:hidden;
             `;
-            div.innerHTML = `
-                <div style="text-align:center;margin-bottom:4px;font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};line-height:1.2;">${escapeHtml(titleText)}</div>
-                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;overflow:hidden;">
-                    ${card.image ? `<img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:40%;object-fit:contain;">` : ''}
-                    <div style="font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};line-height:1.25;">${escapeHtml(card.question)}</div>
-                    <div style="display:flex;flex-direction:column;gap:2px;width:100%;padding:0 4px;">${optionsHtml}</div>
-                </div>
-                <div style="margin-top:auto;padding-top:4px;border-top:1px solid #eee;text-align:center;">
-                    <div style="transform:rotate(180deg);font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};">${escapeHtml(card.answer)}</div>
-                </div>
-            `;
+            div.innerHTML = buildCardHTML(card, { side });
             page.appendChild(div);
         });
         root.appendChild(page);
         pages.push(page);
+    };
+
+    if (mode === 'duplex') {
+        for (const group of groups) {
+            buildPage(group, 'front', false);
+            buildPage(group, 'answer', true);
+        }
+    } else if (mode === 'front') {
+        for (const group of groups) buildPage(group, 'front', false);
+    } else {
+        for (const group of groups) buildPage(group, 'both', false);
     }
-    // Attendre que les images chargent
+
     const imgs = root.querySelectorAll('img');
     await Promise.all([...imgs].map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
     return { root, pages };
@@ -1131,19 +1300,14 @@ async function exportPNG() {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
     busy(true, "Génération du PNG…");
     try {
-        const { root, pages } = await renderCardsToPrintLayout();
-        if (pages.length === 1) {
-            const canvas = await html2canvas(pages[0], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-            canvas.toBlob(b => downloadBlob(b, safeFilename('deck-educards') + '.png'), 'image/png');
-        } else {
-            // Plusieurs pages : un PNG par page
-            for (let i = 0; i < pages.length; i++) {
-                const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-                await new Promise(res => canvas.toBlob(b => {
-                    downloadBlob(b, safeFilename('deck-educards') + `-p${i+1}.png`);
-                    res();
-                }, 'image/png'));
-            }
+        const { root, pages } = await renderCardsToPrintLayout('both');
+        for (let i = 0; i < pages.length; i++) {
+            const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+            await new Promise(res => canvas.toBlob(b => {
+                const suffix = pages.length > 1 ? `-p${i+1}` : '';
+                downloadBlob(b, safeFilename('deck-educards') + suffix + '.png');
+                res();
+            }, 'image/png'));
         }
         document.body.removeChild(root);
         toast(`PNG exporté (${pages.length} page${pages.length>1?'s':''})`, 'success');
@@ -1155,14 +1319,14 @@ async function exportPNG() {
     }
 }
 
-async function exportPDF() {
+async function exportPDF(mode = 'both') {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
     if (!window.jspdf) { toast("Bibliothèque PDF non chargée.", 'error'); return; }
     busy(true, "Génération du PDF…");
     try {
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const { root, pages } = await renderCardsToPrintLayout();
+        const { root, pages } = await renderCardsToPrintLayout(mode);
         for (let i = 0; i < pages.length; i++) {
             const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
             const imgData = canvas.toDataURL('image/jpeg', 0.92);
@@ -1180,13 +1344,56 @@ async function exportPDF() {
     }
 }
 
-function printDeck() {
+async function printDeck(mode = 'both') {
+    if (cards.length === 0) { toast("Aucune carte à imprimer.", 'error'); return; }
+    busy(true, "Préparation de l'impression…");
+    try {
+        const { root, pages } = await renderCardsToPrintLayout(mode);
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+        document.body.appendChild(iframe);
+        const doc = iframe.contentDocument;
+        doc.open();
+        doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>EduCards — impression</title>
+            <style>
+                @page { margin: 0; size: A4; }
+                body { margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .page { page-break-after: always; break-after: page; }
+                .page:last-child { page-break-after: auto; break-after: auto; }
+            </style>
+        </head><body></body></html>`);
+        doc.close();
+        // Wait for body to be ready
+        await new Promise(r => setTimeout(r, 50));
+        pages.forEach(p => {
+            const clone = p.cloneNode(true);
+            clone.classList.add('page');
+            doc.body.appendChild(clone);
+        });
+        // Wait for images in iframe to load
+        const iframeImgs = doc.querySelectorAll('img');
+        await Promise.all([...iframeImgs].map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
+        document.body.removeChild(root);
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 1000);
+        toast("Boîte d'impression ouverte", 'success');
+    } catch (err) {
+        console.error(err);
+        toast("Erreur lors de l'impression.", 'error', 5000);
+    } finally {
+        busy(false);
+    }
+}
+
+function openPrintOptions() {
     if (cards.length === 0) { toast("Aucune carte à imprimer.", 'error'); return; }
     if ($('searchInput').value.trim()) {
-        toast("Recherche active : seules les cartes filtrées seront imprimées.", '', 4000);
+        toast("La recherche est ignorée à l'impression : tout le deck est inclus.", '', 4000);
     }
-    window.print();
+    $('print-options-backdrop').classList.add('open');
 }
+function closePrintOptions() { $('print-options-backdrop').classList.remove('open'); }
 
 /* ------------ Import ------------ */
 async function importJSON(e) {
@@ -1310,15 +1517,180 @@ window.addEventListener('resize', () => {
 });
 
 /* ============================================================
+   STUDY MODE
+   ============================================================ */
+let studyOrder = [];
+let studyIdx = 0;
+let studyFlipped = false;
+let studyHideAnswer = false;
+
+function openStudyMode() {
+    if (cards.length === 0) { toast("Aucune carte à étudier.", 'error'); return; }
+    studyOrder = cards.map((_, i) => i);
+    studyIdx = 0;
+    studyFlipped = false;
+    studyHideAnswer = false;
+    $('study-overlay').classList.remove('hidden');
+    $('study-overlay').classList.add('flex');
+    document.body.style.overflow = 'hidden';
+    renderStudyCard();
+    if (window.lucide) lucide.createIcons();
+}
+function closeStudyMode() {
+    $('study-overlay').classList.add('hidden');
+    $('study-overlay').classList.remove('flex');
+    document.body.style.overflow = '';
+}
+function renderStudyCard() {
+    const card = cards[studyOrder[studyIdx]];
+    if (!card) return;
+    ensureStyles(card);
+    $('studyProgress').textContent = `${studyIdx + 1} / ${studyOrder.length}`;
+    const titleText = card.title?.trim() || settings.globalTitle;
+    const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+    const optionsHtml = card.type === 'multiple'
+        ? lines.map((l, i) => `<div style="font-size:${Math.max(13, card.styleOptions.size + 3)}px;color:${card.styleOptions.color};text-align:left;line-height:1.4;margin:4px 0;"><b>${ALPHABET[i] || '•'})</b> ${escapeHtml(l)}</div>`).join('')
+        : `<div style="font-size:14px;color:#6b7280;font-style:italic;">Vrai ou Faux ?</div>`;
+    $('studyFront').innerHTML = `
+        <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9ca3af;font-weight:700;">${escapeHtml(titleText)}</div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;margin-top:20px;">
+            ${card.image ? `<img src="${escapeAttr(card.image)}" style="max-width:80%;max-height:35%;object-fit:contain;border-radius:8px;">` : ''}
+            <div style="font-size:${Math.max(18, card.styleQ.size + 4)}px;font-weight:700;color:${card.styleQ.color};line-height:1.3;">${escapeHtml(card.question)}</div>
+            <div style="width:100%;">${optionsHtml}</div>
+        </div>
+        <div style="font-size:11px;color:#9ca3af;text-align:center;">Espace / clic pour retourner</div>
+    `;
+    $('studyBack').innerHTML = studyHideAnswer
+        ? `<div style="font-size:14px;color:#a5b4fc;">Verso masqué</div>`
+        : `
+            <div>
+                <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#a5b4fc;font-weight:700;margin-bottom:14px;">Réponse</div>
+                <div style="font-size:22px;font-weight:700;line-height:1.3;">${escapeHtml(card.answer)}</div>
+            </div>
+        `;
+    $('studyCardInner').style.transform = studyFlipped ? 'rotateY(180deg)' : 'rotateY(0)';
+}
+function studyFlip() { studyFlipped = !studyFlipped; renderStudyCard(); }
+function studyNext() { studyIdx = (studyIdx + 1) % studyOrder.length; studyFlipped = false; renderStudyCard(); }
+function studyPrev() { studyIdx = (studyIdx - 1 + studyOrder.length) % studyOrder.length; studyFlipped = false; renderStudyCard(); }
+function studyShuffle() {
+    for (let i = studyOrder.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [studyOrder[i], studyOrder[j]] = [studyOrder[j], studyOrder[i]];
+    }
+    studyIdx = 0; studyFlipped = false; renderStudyCard();
+    toast("Cartes mélangées", 'success', 1200);
+}
+
+$('studyExit').onclick = closeStudyMode;
+$('studyNext').onclick = studyNext;
+$('studyPrev').onclick = studyPrev;
+$('studyFlipBtn').onclick = studyFlip;
+$('studyShuffle').onclick = studyShuffle;
+$('studyToggleAnswer').onclick = () => { studyHideAnswer = !studyHideAnswer; renderStudyCard(); };
+$('studyCardWrap').onclick = studyFlip;
+
+/* ============================================================
+   PRINT OPTIONS
+   ============================================================ */
+$('printOptCancel').onclick = closePrintOptions;
+$('printOptGo').onclick = () => {
+    const mode = document.querySelector('input[name="printMode"]:checked').value;
+    const action = $('printAction').value;
+    closePrintOptions();
+    if (action === 'pdf') exportPDF(mode);
+    else printDeck(mode);
+};
+document.querySelectorAll('#print-options-backdrop, #shortcuts-backdrop').forEach(b => {
+    b.addEventListener('click', e => { if (e.target === b) b.classList.remove('open'); });
+});
+
+/* ============================================================
+   SHORTCUTS HELP
+   ============================================================ */
+function openShortcuts() { $('shortcuts-backdrop').classList.add('open'); }
+$('shortcutsClose').onclick = () => $('shortcuts-backdrop').classList.remove('open');
+
+/* ============================================================
+   TEMPLATES (quick start)
+   ============================================================ */
+const TEMPLATES = {
+    sciences: {
+        title: 'Sciences', cards: [
+            { question: "Quel est le symbole chimique de l'or ?", options: "Or\nAu\nAg\nFe", answer: "Au" },
+            { question: "La cellule animale possède-t-elle une paroi cellulaire ?", type: 'boolean', answer: "Faux" },
+            { question: "Quelle est l'unité SI de la force ?", options: "Joule\nWatt\nNewton\nPascal", answer: "Newton" }
+        ]
+    },
+    histoire: {
+        title: 'Histoire', cards: [
+            { question: "En quelle année a eu lieu la prise de la Bastille ?", options: "1769\n1789\n1799\n1815", answer: "1789" },
+            { question: "Napoléon Bonaparte est mort à Sainte-Hélène.", type: 'boolean', answer: "Vrai" }
+        ]
+    },
+    vocab: {
+        title: 'Vocabulaire EN', cards: [
+            { question: "« Pomme »", options: "Apple\nOrange\nGrape\nPear", answer: "Apple" },
+            { question: "« Livre »", options: "Notebook\nBook\nMagazine\nPaper", answer: "Book" }
+        ]
+    }
+};
+function loadTemplate(key) {
+    const tpl = TEMPLATES[key];
+    if (!tpl) return;
+    settings.globalTitle = tpl.title;
+    tpl.cards.forEach(c => {
+        const card = ensureStyles({
+            id: uid(),
+            question: c.question,
+            type: c.type || 'multiple',
+            options: c.options || '',
+            answer: c.answer,
+            image: null,
+            title: ''
+        });
+        cards.push(card);
+    });
+    save();
+    render();
+    toast(`Modèle « ${tpl.title} » chargé`, 'success');
+}
+
+/* ============================================================
    INIT
    ============================================================ */
 $('open-sidebar').onclick = openSidebar;
 $('close-sidebar').onclick = closeSidebar;
 
+function isTyping(e) {
+    const t = e.target;
+    return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+}
 document.addEventListener('keydown', e => {
+    // Study mode capture all
+    if (!$('study-overlay').classList.contains('hidden')) {
+        if (e.key === 'Escape') { closeStudyMode(); }
+        else if (e.key === 'ArrowRight') { studyNext(); e.preventDefault(); }
+        else if (e.key === 'ArrowLeft') { studyPrev(); e.preventDefault(); }
+        else if (e.key === ' ' || e.key === 'Enter') { studyFlip(); e.preventDefault(); }
+        return;
+    }
     if (e.key === 'Escape') {
-        if (!$('editor').classList.contains('translate-x-full')) closeEditor();
+        if ($('shortcuts-backdrop').classList.contains('open')) $('shortcuts-backdrop').classList.remove('open');
+        else if ($('print-options-backdrop').classList.contains('open')) closePrintOptions();
+        else if (!$('editor').classList.contains('translate-x-full')) closeEditor();
         else if ($('sidebar').classList.contains('open')) closeSidebar();
+        return;
+    }
+    if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+    switch (e.key) {
+        case 'n': case 'N': addCard(); e.preventDefault(); break;
+        case '/': $('searchInput').focus(); e.preventDefault(); break;
+        case 's': case 'S': openStudyMode(); e.preventDefault(); break;
+        case 'p': case 'P': openPrintOptions(); e.preventDefault(); break;
+        case 'a': case 'A': autoRescaleAll(); e.preventDefault(); break;
+        case 't': case 'T': startTutorial(); e.preventDefault(); break;
+        case '?': openShortcuts(); e.preventDefault(); break;
     }
 });
 
