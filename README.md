@@ -2,7 +2,9 @@
 
 > Créateur de flashcards pédagogiques, 100 % web, mono-fichier, sans backend.
 
-Ouvrez `créateur_de_cartes.html` dans un navigateur — c'est tout. Aucune installation, aucun build, aucune connexion requise (sauf au premier chargement pour les CDN). Vos cartes sont sauvegardées localement dans le navigateur.
+Ouvrez `site/créateur_de_cartes.html` dans un navigateur — c'est tout. Aucune installation, aucun build, aucune connexion requise (sauf au premier chargement pour les CDN). Vos cartes sont sauvegardées localement dans le navigateur.
+
+Le dossier `site/` est aussi prêt à être servi tel quel par GitHub Pages, Netlify, Vercel, ou n'importe quel serveur statique — `site/index.html` redirige vers l'app.
 
 ## Captures rapides
 
@@ -103,10 +105,14 @@ Le tout en un seul fichier HTML. Aucun bundler.
 # Cloner et ouvrir
 git clone https://github.com/CapitainenoX/Cards-studio.git
 cd Cards-studio
-open créateur_de_cartes.html   # ou double-clic
+open site/créateur_de_cartes.html   # ou double-clic
+
+# Servir en local
+python -m http.server --directory site 8000
+# puis http://localhost:8000
 ```
 
-Pas de build, pas de test runner. Tout vit dans `créateur_de_cartes.html`.
+Pas de build, pas de test runner. Tout vit dans `site/créateur_de_cartes.html`.
 
 ### Structure du fichier
 ```

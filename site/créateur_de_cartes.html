@@ -1148,18 +1148,47 @@ function safeFilename(base) {
     const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     return `${base}-${stamp}`;
 }
+function isLikelyMobile() {
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+        || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+}
 function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    a.rel = 'noopener';
+    a.target = '_blank'; // iOS : ouvre dans nouvel onglet si download ignoré → user peut sauver
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Revoke différé : iOS/Android peuvent encore lire l'URL après le click
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+async function deliverBlob(blob, filename, mimeType) {
+    // Sur mobile : essayer le Web Share API (sheet natif iOS/Android, partage vers Files, AirDrop, WhatsApp…)
+    if (isLikelyMobile() && navigator.canShare) {
+        try {
+            const file = new File([blob], filename, { type: mimeType || blob.type || 'application/octet-stream' });
+            if (navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: filename });
+                return 'shared';
+            }
+        } catch (err) {
+            if (err.name === 'AbortError') return 'cancelled';
+            // sinon : on bascule sur download
+        }
+    }
+    downloadBlob(blob, filename);
+    return 'downloaded';
+}
+function deliveredMsg(result, label) {
+    if (result === 'shared') return `${label} partagé`;
+    if (result === 'cancelled') return `${label} : partage annulé`;
+    return `${label} téléchargé`;
 }
 
-function exportJSON() {
+async function exportJSON() {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
     const payload = {
         version: 2,
@@ -1168,13 +1197,13 @@ function exportJSON() {
         cards
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    downloadBlob(blob, safeFilename('deck-educards') + '.json');
-    toast(`Deck exporté (${cards.length} cartes)`, 'success');
+    const r = await deliverBlob(blob, safeFilename('deck-educards') + '.json', 'application/json');
+    toast(`${deliveredMsg(r, 'JSON')} · ${cards.length} cartes`, 'success');
 }
 
-function exportCSV() {
+async function exportCSV() {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
-    const sep = ';'; // FR/Excel friendly
+    const sep = ';';
     const esc = v => {
         const s = String(v ?? '');
         return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -1184,8 +1213,9 @@ function exportCSV() {
         const title = c.title?.trim() || settings.globalTitle;
         csv += [title, c.question, c.type, (c.options || '').replace(/\n/g, ' | '), c.answer].map(esc).join(sep) + '\r\n';
     });
-    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), safeFilename('deck-educards') + '.csv');
-    toast(`CSV exporté (${cards.length} cartes)`, 'success');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const r = await deliverBlob(blob, safeFilename('deck-educards') + '.csv', 'text/csv');
+    toast(`${deliveredMsg(r, 'CSV')} · ${cards.length} cartes`, 'success');
 }
 
 function buildCardHTML(card, { side = 'both', mirrored = false } = {}) {
@@ -1305,16 +1335,16 @@ async function exportPNG() {
     busy(true, "Génération du PNG…");
     try {
         const { root, pages } = await renderCardsToPrintLayout('both');
+        let lastResult = 'downloaded';
         for (let i = 0; i < pages.length; i++) {
             const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-            await new Promise(res => canvas.toBlob(b => {
-                const suffix = pages.length > 1 ? `-p${i+1}` : '';
-                downloadBlob(b, safeFilename('deck-educards') + suffix + '.png');
-                res();
-            }, 'image/png'));
+            const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+            const suffix = pages.length > 1 ? `-p${i+1}` : '';
+            lastResult = await deliverBlob(blob, safeFilename('deck-educards') + suffix + '.png', 'image/png');
+            if (lastResult === 'cancelled') break;
         }
         document.body.removeChild(root);
-        toast(`PNG exporté (${pages.length} page${pages.length>1?'s':''})`, 'success');
+        toast(`${deliveredMsg(lastResult, 'PNG')} · ${pages.length} page${pages.length>1?'s':''}`, 'success');
     } catch (err) {
         console.error(err);
         toast("Erreur lors de l'export PNG.", 'error', 5000);
@@ -1338,8 +1368,9 @@ async function exportPDF(mode = 'both') {
             pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
         }
         document.body.removeChild(root);
-        pdf.save(safeFilename('deck-educards') + '.pdf');
-        toast(`PDF exporté (${pages.length} page${pages.length>1?'s':''})`, 'success');
+        const blob = pdf.output('blob');
+        const r = await deliverBlob(blob, safeFilename('deck-educards') + '.pdf', 'application/pdf');
+        toast(`${deliveredMsg(r, 'PDF')} · ${pages.length} page${pages.length>1?'s':''}`, 'success');
     } catch (err) {
         console.error(err);
         toast("Erreur lors de l'export PDF.", 'error', 5000);
