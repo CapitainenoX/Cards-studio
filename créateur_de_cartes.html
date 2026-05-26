@@ -2,615 +2,1334 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduCards Studio Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#4f46e5">
+    <title>EduCards Studio Pro — Créateur de flashcards</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600&display=swap');
-        
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #ffffff; color: #1a1a1a; }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
+        :root {
+            --color-primary: #4f46e5;
+            --color-primary-hover: #4338ca;
+            --color-danger: #dc2626;
+            --color-text: #111827;
+            --color-muted: #4b5563;
+            --color-border: #e5e7eb;
+            --color-bg: #fafafa;
+            --card-w: 320px;
+            --card-h: 450px;
+        }
+
+        * { -webkit-tap-highlight-color: transparent; }
+        html, body { -webkit-text-size-adjust: 100%; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #ffffff; color: var(--color-text); }
+        button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+            outline: 2px solid var(--color-primary);
+            outline-offset: 2px;
+            border-radius: 6px;
+        }
+
+        /* ---- CARD (preview) ---- */
         .card-fixed-size {
-            width: 320px;
-            height: 450px;
+            width: 100%;
+            max-width: var(--card-w);
+            aspect-ratio: 320 / 450;
             display: flex;
             flex-direction: column;
             background: white;
             position: relative;
-            padding: 24px;
-            transition: all 0.2s ease;
+            padding: 20px;
+            transition: box-shadow .2s ease, transform .2s ease;
+            overflow: hidden;
         }
-
+        .card-fixed-size:hover { transform: translateY(-2px); }
+        .card-container { transition: transform .25s ease; }
         .upside-down { transform: rotate(180deg); }
+        .card-edit-hint {
+            position: absolute; inset: auto 0 0 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.65), transparent);
+            color: white; font-size: 11px; font-weight: 600;
+            padding: 16px 8px 8px; text-align: center; opacity: 0; transition: opacity .2s ease;
+            pointer-events: none;
+        }
+        .card-fixed-size:hover .card-edit-hint { opacity: 1; }
 
-        @page {
-            margin: 0;
-            size: A4;
+        /* ---- DRAWER (sidebar + editor) ---- */
+        .drawer-backdrop {
+            position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 40;
+            opacity: 0; pointer-events: none; transition: opacity .25s ease;
+        }
+        .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+
+        @media (max-width: 1023px) {
+            #sidebar {
+                position: fixed; left: 0; top: 0; bottom: 0; width: min(85vw, 340px);
+                transform: translateX(-100%);
+                transition: transform .3s ease;
+                z-index: 50; box-shadow: 0 12px 40px rgba(0,0,0,.18);
+            }
+            #sidebar.open { transform: translateX(0); }
+        }
+        @media (max-width: 767px) {
+            #editor {
+                width: 100% !important; max-width: 100% !important;
+            }
         }
 
+        /* ---- SCROLLBAR ---- */
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* ---- TOAST ---- */
+        #toast-container {
+            position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+            z-index: 80; display: flex; flex-direction: column; gap: 8px;
+            pointer-events: none; max-width: 92vw;
+        }
+        .toast {
+            background: #111827; color: white; padding: 12px 16px; border-radius: 12px;
+            font-size: 13px; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+            display: flex; align-items: center; gap: 10px;
+            transform: translateY(20px); opacity: 0;
+            transition: transform .25s ease, opacity .25s ease;
+            pointer-events: auto;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background: #059669; }
+        .toast.error { background: var(--color-danger); }
+        .toast button { background: rgba(255,255,255,.18); color: white; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
+
+        /* ---- MODAL ---- */
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 90;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity .2s ease;
+            padding: 16px;
+        }
+        .modal-backdrop.open { opacity: 1; pointer-events: auto; }
+        .modal-content {
+            background: white; border-radius: 20px; padding: 28px;
+            max-width: 440px; width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,.3);
+            transform: scale(.96); transition: transform .2s ease;
+        }
+        .modal-backdrop.open .modal-content { transform: scale(1); }
+
+        /* ---- TUTORIAL ---- */
+        #tutorial-overlay {
+            position: fixed; inset: 0; z-index: 100; pointer-events: none;
+            opacity: 0; transition: opacity .3s ease;
+        }
+        #tutorial-overlay.open { opacity: 1; pointer-events: auto; }
+        #tutorial-mask {
+            position: fixed; inset: 0;
+            background: rgba(15,23,42,.7);
+            transition: clip-path .4s ease;
+        }
+        #tutorial-bubble {
+            position: fixed; max-width: 360px; background: white;
+            border-radius: 16px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.35);
+            transition: top .4s ease, left .4s ease;
+        }
+        .tutorial-spotlight {
+            position: fixed; border: 3px solid var(--color-primary);
+            border-radius: 14px; box-shadow: 0 0 0 4px rgba(79,70,229,.25);
+            pointer-events: none;
+            transition: top .4s ease, left .4s ease, width .4s ease, height .4s ease;
+            animation: tutoPulse 1.6s ease-in-out infinite;
+        }
+        @keyframes tutoPulse {
+            0%, 100% { box-shadow: 0 0 0 4px rgba(79,70,229,.25); }
+            50% { box-shadow: 0 0 0 10px rgba(79,70,229,.08); }
+        }
+
+        /* ---- LOADER ---- */
+        #busy-overlay {
+            position: fixed; inset: 0; z-index: 110; background: rgba(255,255,255,.85);
+            display: none; align-items: center; justify-content: center; flex-direction: column; gap: 16px;
+        }
+        #busy-overlay.open { display: flex; }
+        .spinner {
+            width: 44px; height: 44px; border-radius: 50%;
+            border: 4px solid #e5e7eb; border-top-color: var(--color-primary);
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ---- EMPTY STATE ---- */
+        .empty-illust {
+            background: linear-gradient(135deg, #eef2ff 0%, #ede9fe 100%);
+            border: 2px dashed #c7d2fe;
+        }
+
+        /* ---- PRINT ---- */
+        @page { margin: 0; size: A4; }
         @media print {
             .no-print { display: none !important; }
-            body { margin: 0 !important; padding: 0 !important; }
-            main { margin: 0 !important; padding: 0 !important; }
-            #deck { 
-                display: grid !important; 
-                grid-template-columns: repeat(3, 60mm) !important; 
-                gap: 10mm !important;
-                margin: 0 !important;
-                padding: 5mm 5mm !important;
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            main { margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+            #app-shell { display: block !important; height: auto !important; overflow: visible !important; }
+            #deck {
+                display: grid !important;
+                grid-template-columns: repeat(3, 60mm) !important;
+                gap: 8mm 6mm !important;
+                margin: 0 auto !important;
+                padding: 8mm 0 !important;
                 width: fit-content !important;
-                margin-left: auto !important;
-                margin-right: auto !important;
-                grid-auto-flow: dense !important;
             }
-            .card-container { 
-                break-inside: avoid !important;
-                page-break-inside: avoid !important;
-            }
-            .card-container:nth-child(9n+10) { 
-                page-break-before: always !important;
-                break-before: page !important;
-            }
-            .card-fixed-size { 
+            .card-container { break-inside: avoid !important; page-break-inside: avoid !important; }
+            .card-container.page-break { break-before: page !important; page-break-before: always !important; }
+            .card-fixed-size {
                 width: 60mm !important;
                 height: 85mm !important;
+                max-width: 60mm !important;
+                aspect-ratio: unset !important;
                 box-shadow: none !important;
-                break-inside: avoid;
-                page-break-inside: avoid;
                 margin: 0 !important;
-                padding: 2.5mm !important;
+                padding: 3mm !important;
                 box-sizing: border-box !important;
-                font-size: 9pt !important;
                 overflow: hidden;
+                transform: none !important;
             }
-            .card-fixed-size > div {
-                font-size: 9pt !important;
-            }
-            .card-fixed-size img {
-                max-width: 100% !important;
-                max-height: 20mm !important;
-            }
+            .card-edit-hint, .card-hover-tools { display: none !important; }
         }
-
-        .custom-scroll::-webkit-scrollbar { width: 4px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-        
-        .card-container { transition: transform 0.3s ease; }
     </style>
 </head>
-<body class="h-screen flex overflow-hidden">
+<body class="overflow-hidden">
 
-    <aside class="no-print w-80 h-full border-r border-gray-100 flex flex-col bg-white z-20">
-        <div class="p-8">
-            <h1 class="text-xl font-semibold tracking-tight flex items-center gap-2">
-                <span class="w-3 h-3 bg-indigo-600 rounded-full"></span> Studio Pro
-            </h1>
-            <p id="stats" class="text-[10px] text-gray-400 mt-1 uppercase font-bold tracking-widest"></p>
+<div id="app-shell" class="h-screen flex flex-col lg:flex-row overflow-hidden">
+
+    <!-- ============ MOBILE TOPBAR ============ -->
+    <header class="no-print lg:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white sticky top-0 z-30">
+        <button id="open-sidebar" aria-label="Ouvrir le menu" class="p-2 rounded-lg hover:bg-gray-100">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+        </button>
+        <h1 class="text-base font-bold flex items-center gap-2">
+            <span class="w-2.5 h-2.5 bg-indigo-600 rounded-full"></span> EduCards
+        </h1>
+        <button onclick="addCard()" aria-label="Ajouter une carte" class="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
+            <i data-lucide="plus" class="w-5 h-5"></i>
+        </button>
+    </header>
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside id="sidebar" class="no-print w-80 h-full border-r border-gray-200 flex flex-col bg-white z-20 shrink-0">
+        <div class="p-6 lg:p-7 flex items-start justify-between">
+            <div>
+                <h1 class="text-xl font-bold tracking-tight flex items-center gap-2">
+                    <span class="w-3 h-3 bg-indigo-600 rounded-full"></span> EduCards
+                </h1>
+                <p class="text-xs text-gray-500 mt-0.5">Créateur de flashcards</p>
+                <p id="stats" class="text-[11px] text-gray-600 mt-2 font-medium"></p>
+            </div>
+            <button id="close-sidebar" aria-label="Fermer le menu" class="lg:hidden p-2 rounded-lg hover:bg-gray-100">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto px-6 custom-scroll space-y-8">
+        <div class="flex-1 overflow-y-auto px-5 lg:px-6 pb-6 custom-scroll space-y-7">
+
+            <!-- ACTIONS PRIMAIRES -->
             <div class="space-y-2">
-                <button onclick="addCard()" class="w-full py-3 px-4 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                <button onclick="addCard()" class="w-full py-3 px-4 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition flex items-center justify-center gap-2 shadow-sm">
                     <i data-lucide="plus" class="w-4 h-4"></i> Ajouter une carte
                 </button>
-                
-                <div class="relative mt-4">
-                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-gray-400"></i>
-                    <input type="text" id="searchInput" oninput="render()" placeholder="Rechercher une carte..." class="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-100">
-                </div>
 
-                <div class="grid grid-cols-2 gap-2 pt-2">
-                    <button onclick="exportJSON()" class="py-2 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1">
-                        <i data-lucide="download" class="w-3 h-3"></i> JSON
-                    </button>
-                    <button onclick="exportCSV()" class="py-2 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1">
-                        <i data-lucide="table" class="w-3 h-3"></i> CSV
-                    </button>
-                    <button onclick="exportPNG()" class="py-2 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1">
-                        <i data-lucide="image" class="w-3 h-3"></i> PNG
-                    </button>
-                    <button onclick="document.getElementById('importFile').click()" class="py-2 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1 col-span-2">
-                        <i data-lucide="upload" class="w-3 h-3"></i> Importer un deck
-                    </button>
+                <button data-tutorial="autoscale" onclick="autoRescaleAll()" class="w-full py-2.5 px-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl text-sm font-semibold hover:opacity-95 transition flex items-center justify-center gap-2 shadow-sm">
+                    <i data-lucide="wand-2" class="w-4 h-4"></i> Auto-ajuster (pro)
+                </button>
+
+                <div class="relative mt-3">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-gray-500" aria-hidden="true"></i>
+                    <label for="searchInput" class="sr-only">Rechercher une carte</label>
+                    <input type="search" id="searchInput" oninput="render()" placeholder="Rechercher…"
+                           class="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400">
                 </div>
-                <input type="file" id="importFile" class="hidden" accept=".json" onchange="importJSON(event)">
             </div>
 
-            <div class="space-y-4">
-                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Design Global</p>
-                <div class="space-y-5">
-                    <div class="flex justify-between items-center text-sm">
-                        <span class="text-gray-500">Couleur Bordure</span>
-                        <input type="color" id="globalBorderColor" value="#e2e8f0" onchange="render()" class="w-6 h-6 rounded-full cursor-pointer">
-                    </div>
+            <!-- TITRE GLOBAL -->
+            <div class="space-y-2">
+                <label for="globalTitleInput" class="text-[11px] font-bold uppercase tracking-widest text-gray-600">Titre du deck</label>
+                <input type="text" id="globalTitleInput" oninput="setGlobalTitle(this.value)"
+                       class="w-full border border-gray-200 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400">
+            </div>
 
-                    <div class="space-y-2">
-                        <div class="flex justify-between text-xs text-gray-500">
-                            <span>Épaisseur</span>
-                            <span id="borderVal" class="font-bold text-indigo-600">1px</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <button onclick="adjustSlider('globalBorderSize', -1)" class="p-1 bg-gray-100 rounded-md hover:bg-gray-200 text-xs">-</button>
-                            <input type="range" id="globalBorderSize" min="0" max="10" value="1" oninput="render()" class="flex-1 accent-indigo-600">
-                            <button onclick="adjustSlider('globalBorderSize', 1)" class="p-1 bg-gray-100 rounded-md hover:bg-gray-200 text-xs">+</button>
-                        </div>
-                    </div>
+            <!-- DESIGN GLOBAL -->
+            <div class="space-y-4" data-tutorial="design">
+                <p class="text-[11px] font-bold uppercase tracking-widest text-gray-600">Design global</p>
 
-                    <div class="space-y-2">
-                        <div class="flex justify-between text-xs text-gray-500">
-                            <span>Coins arrondis</span>
-                            <span id="radiusVal" class="font-bold text-indigo-600">16px</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <button onclick="adjustSlider('globalRadius', -2)" class="p-1 bg-gray-100 rounded-md hover:bg-gray-200 text-xs">-</button>
-                            <input type="range" id="globalRadius" min="0" max="80" value="16" oninput="render()" class="flex-1 accent-indigo-600">
-                            <button onclick="adjustSlider('globalRadius', 2)" class="p-1 bg-gray-100 rounded-md hover:bg-gray-200 text-xs">+</button>
-                        </div>
+                <div class="flex justify-between items-center text-sm">
+                    <label for="globalBorderColor" class="text-gray-700">Couleur bordure</label>
+                    <input type="color" id="globalBorderColor" value="#e5e7eb" onchange="onGlobalSettingChange()" class="w-8 h-8 rounded-lg cursor-pointer border border-gray-200">
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs text-gray-600">
+                        <label for="globalBorderSize">Épaisseur</label>
+                        <span id="borderVal" class="font-bold text-indigo-600">1px</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button aria-label="Réduire l'épaisseur" onclick="adjustSlider('globalBorderSize', -1)" class="w-9 h-9 flex items-center justify-center bg-gray-100 rounded-lg hover:bg-gray-200">−</button>
+                        <input type="range" id="globalBorderSize" min="0" max="10" value="1" oninput="onGlobalSettingChange()" class="flex-1 accent-indigo-600">
+                        <button aria-label="Augmenter l'épaisseur" onclick="adjustSlider('globalBorderSize', 1)" class="w-9 h-9 flex items-center justify-center bg-gray-100 rounded-lg hover:bg-gray-200">+</button>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs text-gray-600">
+                        <label for="globalRadius">Coins arrondis</label>
+                        <span id="radiusVal" class="font-bold text-indigo-600">16px</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button aria-label="Réduire le rayon" onclick="adjustSlider('globalRadius', -2)" class="w-9 h-9 flex items-center justify-center bg-gray-100 rounded-lg hover:bg-gray-200">−</button>
+                        <input type="range" id="globalRadius" min="0" max="80" value="16" oninput="onGlobalSettingChange()" class="flex-1 accent-indigo-600">
+                        <button aria-label="Augmenter le rayon" onclick="adjustSlider('globalRadius', 2)" class="w-9 h-9 flex items-center justify-center bg-gray-100 rounded-lg hover:bg-gray-200">+</button>
                     </div>
                 </div>
             </div>
 
-            <button onclick="clearAll()" class="w-full py-2 text-red-400 hover:text-red-600 text-[10px] font-bold uppercase tracking-tighter transition">Effacer tout le deck</button>
+            <!-- EXPORTS -->
+            <div class="space-y-2" data-tutorial="export">
+                <p class="text-[11px] font-bold uppercase tracking-widest text-gray-600">Exporter / Importer</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="exportJSON()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5">
+                        <i data-lucide="file-json" class="w-3.5 h-3.5"></i> JSON
+                    </button>
+                    <button onclick="exportCSV()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5">
+                        <i data-lucide="table" class="w-3.5 h-3.5"></i> CSV
+                    </button>
+                    <button onclick="exportPNG()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5">
+                        <i data-lucide="image" class="w-3.5 h-3.5"></i> PNG
+                    </button>
+                    <button onclick="exportPDF()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i> PDF
+                    </button>
+                    <button onclick="document.getElementById('importFile').click()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5 col-span-2">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> Importer un deck (.json)
+                    </button>
+                </div>
+                <input type="file" id="importFile" class="hidden" accept=".json,application/json" onchange="importJSON(event)">
+            </div>
+
+            <!-- TUTORIEL + DANGER -->
+            <div class="space-y-2 pt-2">
+                <button onclick="startTutorial()" class="w-full py-2 text-indigo-600 hover:text-indigo-800 text-xs font-semibold transition flex items-center justify-center gap-2">
+                    <i data-lucide="help-circle" class="w-4 h-4"></i> Revoir le tutoriel
+                </button>
+                <button onclick="clearAll()" class="w-full py-2 text-red-500 hover:text-red-700 text-[11px] font-bold uppercase tracking-wider transition">
+                    Effacer tout le deck
+                </button>
+            </div>
         </div>
 
-        <div class="p-6">
-            <button onclick="window.print()" class="w-full py-3 bg-black text-white rounded-xl text-sm font-bold hover:bg-gray-800 transition shadow-lg flex items-center justify-center gap-2">
+        <!-- PRINT CTA -->
+        <div class="p-5 lg:p-6 border-t border-gray-100" data-tutorial="print">
+            <button onclick="printDeck()" class="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-black transition shadow-lg flex items-center justify-center gap-2">
                 <i data-lucide="printer" class="w-4 h-4"></i> Imprimer (3/ligne)
             </button>
+            <p class="text-[10px] text-gray-500 text-center mt-2">A4 · 9 cartes/page · prêt à découper</p>
         </div>
     </aside>
 
-    <main class="flex-1 bg-[#fcfcfc] overflow-y-auto p-12 custom-scroll">
-        <div id="deck" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+    <!-- ============ MAIN ============ -->
+    <main class="flex-1 bg-[#fafafa] overflow-y-auto p-4 sm:p-6 lg:p-10 custom-scroll">
+        <div id="empty-state" class="hidden">
+            <div class="max-w-xl mx-auto text-center py-12 px-6 empty-illust rounded-3xl">
+                <div class="w-16 h-16 mx-auto mb-4 bg-white rounded-2xl shadow-sm flex items-center justify-center">
+                    <i data-lucide="sparkles" class="w-8 h-8 text-indigo-600"></i>
+                </div>
+                <h2 class="text-2xl font-bold mb-2">Bienvenue dans EduCards</h2>
+                <p class="text-gray-600 mb-6">Créez, personnalisez et imprimez vos flashcards pédagogiques.</p>
+                <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                    <button onclick="startTutorial()" class="px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold hover:bg-gray-50 transition flex items-center justify-center gap-2">
+                        <i data-lucide="play" class="w-4 h-4"></i> Démarrer le tour
+                    </button>
+                    <button onclick="addCard()" class="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                        <i data-lucide="plus" class="w-4 h-4"></i> Créer ma première carte
+                    </button>
+                </div>
             </div>
+        </div>
+        <div id="deck" class="grid gap-6 sm:gap-8 max-w-7xl mx-auto"
+             style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));"></div>
+        <div id="search-empty" class="hidden text-center py-16 text-gray-500">
+            <i data-lucide="search-x" class="w-12 h-12 mx-auto mb-3 text-gray-300"></i>
+            <p>Aucune carte ne correspond à votre recherche.</p>
+        </div>
     </main>
 
-    <div id="editor" class="no-print fixed right-0 top-0 h-full w-[400px] bg-white shadow-2xl translate-x-full transition-transform duration-300 ease-in-out z-30 flex flex-col border-l border-gray-100">
-        <div class="p-6 border-b flex justify-between items-center bg-gray-50">
-            <h2 class="font-semibold">Personnalisation</h2>
-            <button onclick="closeEditor()" class="p-2 hover:bg-gray-200 rounded-full transition"><i data-lucide="x" class="w-5 h-5"></i></button>
+    <!-- ============ EDITOR ============ -->
+    <div id="editor" class="no-print fixed right-0 top-0 h-full w-full md:w-[420px] bg-white shadow-2xl translate-x-full transition-transform duration-300 ease-in-out z-30 flex flex-col border-l border-gray-200" role="dialog" aria-labelledby="editorTitle" aria-hidden="true">
+        <div class="p-5 border-b flex justify-between items-center bg-gray-50">
+            <h2 id="editorTitle" class="font-semibold">Personnaliser la carte</h2>
+            <button onclick="closeEditor()" aria-label="Fermer l'éditeur" class="p-2 hover:bg-gray-200 rounded-lg transition">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
         </div>
-        <div id="editorContent" class="p-8 space-y-6 overflow-y-auto flex-1 custom-scroll"></div>
+        <div id="editorContent" class="p-6 space-y-6 overflow-y-auto flex-1 custom-scroll"></div>
     </div>
+</div>
 
-    <script>
+<!-- ============ DRAWER BACKDROP ============ -->
+<div id="sidebar-backdrop" class="no-print drawer-backdrop lg:hidden" onclick="closeSidebar()"></div>
 
-        let cards = JSON.parse(localStorage.getItem('edu_pro_cards_v2')) || [];
-        let activeId = null;
-        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        let globalTitle = localStorage.getItem('edu_pro_title') || 'Scientifique card';
+<!-- ============ TOAST ============ -->
+<div id="toast-container" class="no-print" aria-live="polite" aria-atomic="true"></div>
 
-        function addCard() {
-            const card = {
-                id: Date.now(),
-                question: "Nouvelle Question",
-                type: "multiple",
-                options: "Option 1\nOption 2",
-                answer: "La réponse ici",
-                image: null,
-                bgColor: '#ffffff',
-                styleQ: { size: 18, color: '#1a1a1a', weight: 'bold', italic: false, underline: false },
-                styleA: { size: 12, color: '#6366f1', weight: 'bold', italic: false, underline: false },
-                styleTitle: { size: 16, color: '#1a1a1a', weight: 'bold', italic: false, underline: false },
-                styleOptions: { size: 10, color: '#666666', weight: 'normal', italic: false, underline: false },
-                imgSize: 100,
-                title: globalTitle
-            };
-            cards.push(card);
-            render();
-            save();
-        }
+<!-- ============ MODAL (confirm) ============ -->
+<div id="modal-backdrop" class="no-print modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-content">
+        <h3 id="modalTitle" class="text-lg font-bold mb-2"></h3>
+        <p id="modalBody" class="text-sm text-gray-600 mb-6"></p>
+        <div class="flex gap-3 justify-end">
+            <button id="modalCancel" class="px-4 py-2 rounded-lg text-sm font-semibold border border-gray-200 hover:bg-gray-50">Annuler</button>
+            <button id="modalConfirm" class="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700">Confirmer</button>
+        </div>
+    </div>
+</div>
 
-        function duplicateCard(id) {
-            const original = cards.find(c => c.id === id);
-            const copy = JSON.parse(JSON.stringify(original));
-            copy.id = Date.now();
-            const index = cards.findIndex(c => c.id === id);
-            cards.splice(index + 1, 0, copy);
-            render();
-            save();
-        }
+<!-- ============ BUSY OVERLAY ============ -->
+<div id="busy-overlay" class="no-print" aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
+    <p id="busy-label" class="text-sm font-medium text-gray-700">Génération en cours…</p>
+</div>
 
-        function moveCard(id, direction) {
-            const index = cards.findIndex(c => c.id === id);
-            if (direction === 'up' && index > 0) {
-                [cards[index], cards[index - 1]] = [cards[index - 1], cards[index]];
-            } else if (direction === 'down' && index < cards.length - 1) {
-                [cards[index], cards[index + 1]] = [cards[index + 1], cards[index]];
-            }
-            render();
-            save();
-        }
+<!-- ============ TUTORIAL ============ -->
+<div id="tutorial-overlay" class="no-print" role="dialog" aria-modal="true" aria-labelledby="tutoTitle">
+    <div id="tutorial-mask"></div>
+    <div id="tutorial-spotlight-el" class="tutorial-spotlight" style="display:none;"></div>
+    <div id="tutorial-bubble">
+        <div class="flex items-center gap-2 mb-2">
+            <span id="tutoStep" class="text-[10px] font-bold uppercase tracking-widest text-indigo-600"></span>
+        </div>
+        <h3 id="tutoTitle" class="text-base font-bold mb-1"></h3>
+        <p id="tutoBody" class="text-sm text-gray-600 mb-4"></p>
+        <div class="flex items-center justify-between gap-3">
+            <button id="tutoSkip" class="text-xs text-gray-500 hover:text-gray-700 font-medium">Passer</button>
+            <div class="flex gap-2">
+                <button id="tutoPrev" class="px-3 py-1.5 rounded-lg text-sm font-semibold border border-gray-200 hover:bg-gray-50">Précédent</button>
+                <button id="tutoNext" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700">Suivant</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-        function adjustSlider(id, delta) {
-            const slider = document.getElementById(id);
-            slider.value = parseInt(slider.value) + delta;
-            render();
-        }
+<script>
+/* =====================================================================
+   EduCards Studio Pro — v2 (responsive, tutoriel, auto-rescale, PDF)
+   ===================================================================== */
 
-        function render() {
-            const container = document.getElementById('deck');
-            const radius = document.getElementById('globalRadius').value;
-            const borderCol = document.getElementById('globalBorderColor').value;
-            const borderSize = document.getElementById('globalBorderSize').value;
-            const search = document.getElementById('searchInput').value.toLowerCase();
+const STORAGE_KEY = 'edu_pro_cards_v2';
+const SETTINGS_KEY = 'edu_pro_settings_v1';
+const TUTO_KEY = 'edu_pro_tutorial_done_v1';
 
-            // Mise à jour des labels
-            document.getElementById('radiusVal').innerText = radius + 'px';
-            document.getElementById('borderVal').innerText = borderSize + 'px';
-            document.getElementById('stats').innerText = `${cards.length} Cartes | ~${Math.ceil(cards.length * 0.5)} min de lecture`;
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-            container.innerHTML = '';
+const DEFAULTS = {
+    styleQ: { size: 18, color: '#111827', weight: 'bold', italic: false, underline: false },
+    styleA: { size: 12, color: '#4f46e5', weight: 'bold', italic: false, underline: false },
+    styleTitle: { size: 16, color: '#111827', weight: 'bold', italic: false, underline: false },
+    styleOptions: { size: 11, color: '#4b5563', weight: 'normal', italic: false, underline: false },
+    imgSize: 100,
+    bgColor: '#ffffff'
+};
 
-            const filteredCards = cards.filter(c => 
-                c.question.toLowerCase().includes(search) || 
-                c.answer.toLowerCase().includes(search)
-            );
+let cards = [];
+let activeId = null;
+let settings = { globalTitle: 'Scientifique card', borderColor: '#e5e7eb', borderSize: 1, radius: 16 };
+let undoStack = [];
 
-            filteredCards.forEach((card, index) => {
-                const cardEl = document.createElement('div');
-                cardEl.className = 'card-container group relative';
-                // Style dynamique de la carte
-                const innerStyle = `
-                    border-radius: ${radius}px; 
-                    border: ${borderSize}px solid ${borderCol};
-                    background-color: ${card.bgColor || '#ffffff'};
-                `;
+/* ------------ Utils ------------ */
+const $ = id => document.getElementById(id);
+function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+}
+function escapeAttr(str) { return escapeHtml(str); }
+function uid() {
+    if (window.crypto?.randomUUID) return crypto.randomUUID();
+    return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+}
+function ensureStyles(card) {
+    card.styleQ = { ...DEFAULTS.styleQ, ...(card.styleQ || {}) };
+    card.styleA = { ...DEFAULTS.styleA, ...(card.styleA || {}) };
+    card.styleTitle = { ...DEFAULTS.styleTitle, ...(card.styleTitle || {}) };
+    card.styleOptions = { ...DEFAULTS.styleOptions, ...(card.styleOptions || {}) };
+    if (card.imgSize == null) card.imgSize = DEFAULTS.imgSize;
+    if (!card.bgColor) card.bgColor = DEFAULTS.bgColor;
+    return card;
+}
 
-                let optionsHtml = '';
-                if(card.type === 'multiple') {
-                    const lines = card.options.split('\n').filter(l => l.trim() !== '');
-                    optionsHtml = lines.map((l, i) => `<div style="font-size: ${(card.styleOptions?.size || 10)}px; color: ${card.styleOptions?.color || '#666666'}; font-weight: ${card.styleOptions?.weight === 'bold' ? '700' : '400'}; font-style: ${card.styleOptions?.italic ? 'italic' : 'normal'}; text-decoration: ${card.styleOptions?.underline ? 'underline' : 'none'};" class="text-left w-full px-4">${alphabet[i]}) ${l}</div>`).join('');
-                } else {
-                    optionsHtml = `<div class="italic" style="font-size: ${(card.styleOptions?.size || 10)}px; color: ${card.styleOptions?.color || '#666666'};">Vrai ou Faux ?</div>`;
-                }
+/* ------------ Load / Save ------------ */
+function loadState() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        cards = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(cards)) cards = [];
+        cards.forEach(ensureStyles);
+    } catch (e) { cards = []; }
+    try {
+        const s = localStorage.getItem(SETTINGS_KEY);
+        if (s) settings = { ...settings, ...JSON.parse(s) };
+    } catch (e) {}
+}
+function save() {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (e) {
+        toast("Sauvegarde impossible : quota localStorage dépassé. Exportez en JSON pour ne rien perdre.", 'error', 8000);
+    }
+}
 
-                cardEl.innerHTML = `
-                    <div class="no-print absolute -top-4 left-1/2 -translate-x-1/2 flex gap-2 opacity-0 group-hover:opacity-100 transition-all z-10">
-                        <button onclick="moveCard(${card.id}, 'up')" class="p-2 bg-white shadow-xl rounded-full hover:text-indigo-600"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
-                        <button onclick="duplicateCard(${card.id})" class="p-2 bg-white shadow-xl rounded-full hover:text-green-600"><i data-lucide="copy" class="w-4 h-4"></i></button>
-                        <button onclick="moveCard(${card.id}, 'down')" class="p-2 bg-white shadow-xl rounded-full hover:text-indigo-600"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
-                    </div>
-                    <div onclick="openEditor(${card.id})" class="card-fixed-size shadow-sm hover:shadow-xl cursor-pointer mx-auto" style="${innerStyle}">
-                        <div class="w-full text-center mb-2" style="font-size: ${(card.styleTitle?.size || 16)}px; color: ${card.styleTitle?.color || '#1a1a1a'}; font-weight: ${card.styleTitle?.weight === 'bold' ? '700' : '400'}; font-style: ${card.styleTitle?.italic ? 'italic' : 'normal'}; text-decoration: ${card.styleTitle?.underline ? 'underline' : 'none'};">${card.title || globalTitle}</div>
-                        <div class="flex-1 flex flex-col items-center gap-4 text-center overflow-hidden">
-                            ${card.image ? `<img src="${card.image}" style="width: ${card.imgSize}%" class="max-h-64 object-contain rounded-lg">` : ''}
-                            <div style="font-size: ${card.styleQ.size}px; color: ${card.styleQ.color}; font-weight: ${card.styleQ.weight === 'bold' ? '700' : '400'}; font-style: ${card.styleQ.italic ? 'italic' : 'normal'}; text-decoration: ${card.styleQ.underline ? 'underline' : 'none'}">
-                                ${card.question}
-                            </div>
-                            <div class="w-full flex flex-col gap-1 mt-2">
-                                ${optionsHtml}
-                            </div>
-                        </div>
-                        <div class="mt-auto pt-6 border-t border-gray-50 flex flex-col items-center">
-                            <div class="upside-down text-center" style="font-size: ${card.styleA.size}px; color: ${card.styleA.color}; font-weight: ${card.styleA.weight === 'bold' ? '700' : '400'}; font-style: ${card.styleA.italic ? 'italic' : 'normal'}; text-decoration: ${card.styleA.underline ? 'underline' : 'none'}">
-                                ${card.answer}
-                            </div>
-                        </div>
-                    </div>
-                `;
-                container.appendChild(cardEl);
-            });
-            lucide.createIcons();
-        }
+/* ------------ Toast ------------ */
+function toast(message, type = '', duration = 3000, action = null) {
+    const c = $('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span>${escapeHtml(message)}</span>`;
+    if (action) {
+        const b = document.createElement('button');
+        b.textContent = action.label;
+        b.onclick = () => { action.handler(); t.remove(); };
+        t.appendChild(b);
+    }
+    c.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('show'));
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, duration);
+}
 
-        function openEditor(id) {
-            activeId = id;
-            const card = cards.find(c => c.id === id);
-            
-            // Initialiser les objets de style manquants
-            if (!card.styleQ) card.styleQ = { size: 18, color: '#1a1a1a', weight: 'bold', italic: false, underline: false };
-            if (!card.styleA) card.styleA = { size: 12, color: '#6366f1', weight: 'bold', italic: false, underline: false };
-            if (!card.styleTitle) card.styleTitle = { size: 16, color: '#1a1a1a', weight: 'bold', italic: false, underline: false };
-            if (!card.styleOptions) card.styleOptions = { size: 10, color: '#666666', weight: 'normal', italic: false, underline: false };
-            
-            const editor = document.getElementById('editor');
-            editor.classList.remove('translate-x-full');
-
-            document.getElementById('editorContent').innerHTML = `
-                <div class="space-y-8">
-                    <div class="p-4 bg-gray-50 rounded-xl space-y-4">
-                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Apparence de la carte</label>
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs">Fond de carte</span>
-                            <input type="color" value="${card.bgColor || '#ffffff'}" onchange="updateProp('bgColor', this.value)" class="w-8 h-8 rounded cursor-pointer border-none">
-                        </div>
-                        <div class="space-y-2">
-                            <label class="text-xs flex justify-between">Image <span>${card.imgSize}%</span></label>
-                            <input type="file" onchange="uploadImg(event)" class="text-xs w-full">
-                            <div class="flex items-center gap-2">
-                                <button onclick="adjustEditorSlider('imgSize', -5)" class="p-1 bg-white border rounded shadow-sm">-</button>
-                                <input type="range" min="30" max="100" value="${card.imgSize}" oninput="updateProp('imgSize', this.value)" class="flex-1 accent-indigo-600">
-                                <button onclick="adjustEditorSlider('imgSize', 5)" class="p-1 bg-white border rounded shadow-sm">+</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="space-y-3">
-                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Titre</label>
-                        <input type="text" value="${card.title || globalTitle}" oninput="updateProp('title', this.value)" class="w-full border p-3 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-                        <div class="flex items-center gap-2">
-                            ${renderStyleButtons(card.styleTitle, 'styleTitle')}
-                            <div class="flex items-center border rounded px-1 ml-auto">
-                                <button onclick="adjustStyleSlider('styleTitle', 'size', -1)" class="p-1 text-xs">-</button>
-                                <span class="w-8 text-center text-xs font-bold">${card.styleTitle?.size || 16}px</span>
-                                <button onclick="adjustStyleSlider('styleTitle', 'size', 1)" class="p-1 text-xs">+</button>
-                            </div>
-                            <input type="color" value="${card.styleTitle?.color || '#1a1a1a'}" onchange="updateStyle('styleTitle', 'color', this.value)" class="w-8 h-8 rounded cursor-pointer border-none">
-                        </div>
-                    </div>
-
-                    <div class="space-y-3">
-                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Question</label>
-                        <textarea oninput="updateProp('question', this.value)" class="w-full border p-3 rounded-lg text-sm h-20 outline-none focus:ring-2 focus:ring-indigo-100">${card.question}</textarea>
-                        <div class="flex items-center gap-2">
-                            ${renderStyleButtons(card.styleQ, 'styleQ')}
-                            <div class="flex items-center border rounded px-1 ml-auto">
-                                <button onclick="adjustStyleSlider('styleQ', 'size', -1)" class="p-1 text-xs">-</button>
-                                <span class="w-8 text-center text-xs font-bold">${card.styleQ.size}px</span>
-                                <button onclick="adjustStyleSlider('styleQ', 'size', 1)" class="p-1 text-xs">+</button>
-                            </div>
-                            <input type="color" value="${card.styleQ.color}" onchange="updateStyle('styleQ', 'color', this.value)" class="w-8 h-8 rounded cursor-pointer border-none">
-                        </div>
-                    </div>
-
-                    <div class="space-y-3">
-                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Options/Choix</label>
-                        <div class="flex items-center gap-2">
-                            ${renderStyleButtons(card.styleOptions, 'styleOptions')}
-                            <div class="flex items-center border rounded px-1 ml-auto">
-                                <button onclick="adjustStyleSlider('styleOptions', 'size', -1)" class="p-1 text-xs">-</button>
-                                <span class="w-8 text-center text-xs font-bold">${card.styleOptions?.size || 10}px</span>
-                                <button onclick="adjustStyleSlider('styleOptions', 'size', 1)" class="p-1 text-xs">+</button>
-                            </div>
-                            <input type="color" value="${card.styleOptions?.color || '#666666'}" onchange="updateStyle('styleOptions', 'color', this.value)" class="w-8 h-8 rounded cursor-pointer border-none">
-                        </div>
-                    </div>
-
-                    <div class="space-y-3">
-                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Type & Options</label>
-                        <select onchange="updateProp('type', this.value); openEditor(${id})" class="w-full border p-2 rounded-lg text-sm bg-white">
-                            <option value="multiple" ${card.type === 'multiple' ? 'selected' : ''}>Choix Multiples</option>
-                            <option value="boolean" ${card.type === 'boolean' ? 'selected' : ''}>Vrai / Faux</option>
-                        </select>
-                        ${card.type === 'multiple' ? `
-                            <textarea oninput="updateProp('options', this.value)" placeholder="Une option par ligne..." class="w-full border p-3 rounded-lg text-xs font-mono h-24 outline-none focus:ring-2 focus:ring-indigo-100">${card.options}</textarea>
-                        ` : ''}
-                    </div>
-
-                    <div class="space-y-3">
-                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Réponse</label>
-                        <input type="text" value="${card.answer}" oninput="updateProp('answer', this.value)" class="w-full border p-3 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-                        <div class="flex items-center gap-2">
-                            ${renderStyleButtons(card.styleA, 'styleA')}
-                            <div class="flex items-center border rounded px-1 ml-auto">
-                                <button onclick="adjustStyleSlider('styleA', 'size', -1)" class="p-1 text-xs">-</button>
-                                <span class="w-8 text-center text-xs font-bold">${card.styleA.size}px</span>
-                                <button onclick="adjustStyleSlider('styleA', 'size', 1)" class="p-1 text-xs">+</button>
-                            </div>
-                            <input type="color" value="${card.styleA.color}" onchange="updateStyle('styleA', 'color', this.value)" class="w-8 h-8 rounded cursor-pointer border-none">
-                        </div>
-                    </div>
-
-                    <button onclick="deleteCard(${id})" class="w-full py-3 text-red-500 bg-red-50 rounded-xl text-xs font-bold hover:bg-red-100 transition mt-10">Supprimer la carte</button>
-                </div>
-            `;
-            lucide.createIcons();
-        }
-
-        // Helpers pour l'éditeur (Boutons +/-)
-        function adjustEditorSlider(prop, delta) {
-            const card = cards.find(c => c.id === activeId);
-            if (prop === 'imgSize') {
-                card[prop] = Math.max(10, Math.min(200, parseInt(card[prop]) + delta));
-            } else {
-                card[prop] = Math.max(10, Math.min(100, parseInt(card[prop]) + delta));
-            }
-            openEditor(activeId);
-            render();
-            save();
-        }
-
-        function adjustStyleSlider(target, prop, delta) {
-            const card = cards.find(c => c.id === activeId);
-            if (!card[target]) card[target] = { size: 12, color: '#000000', weight: 'normal', italic: false, underline: false };
-            const currentVal = parseInt(card[target][prop]) || 12;
-            card[target][prop] = Math.max(8, Math.min(48, currentVal + delta));
-            openEditor(activeId);
-            render();
-            save();
-        }
-
-
-        function renderStyleButtons(styleObj, target) {
-            if (!styleObj) styleObj = { size: 12, color: '#000000', weight: 'normal', italic: false, underline: false };
-            return `
-                <div class="flex gap-1">
-                    <button onclick="toggleStyle('${target}', 'weight')" class="p-2 border rounded ${styleObj.weight === 'bold' ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="bold" class="w-3 h-3"></i></button>
-                    <button onclick="toggleStyle('${target}', 'italic')" class="p-2 border rounded ${styleObj.italic ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="italic" class="w-3 h-3"></i></button>
-                    <button onclick="toggleStyle('${target}', 'underline')" class="p-2 border rounded ${styleObj.underline ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="underline" class="w-3 h-3"></i></button>
-                </div>
-            `;
-        }
-
-        function updateProp(key, val) {
-            const card = cards.find(c => c.id === activeId);
-            if (key === 'imgSize') {
-                card[key] = Math.max(10, Math.min(200, parseInt(val)));
-            } else {
-                card[key] = val;
-            }
-            render();
-            save();
-        }
-
-        function updateStyle(target, prop, val) {
-            const card = cards.find(c => c.id === activeId);
-            if (!card[target]) card[target] = {};
-            if (prop === 'size') {
-                card[target][prop] = Math.max(8, Math.min(48, parseInt(val)));
-            } else {
-                card[target][prop] = val;
-            }
-            render();
-            save();
-        }
-
-        function toggleStyle(target, prop) {
-            const card = cards.find(c => c.id === activeId);
-            if (!card[target]) card[target] = {};
-            if (prop === 'weight') card[target][prop] = card[target][prop] === 'bold' ? 'normal' : 'bold';
-            else card[target][prop] = !card[target][prop];
-            openEditor(activeId);
-            render();
-            save();
-        }
-
-        function uploadImg(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                updateProp('image', reader.result);
-                openEditor(activeId);
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function deleteCard(id) {
-            if(confirm("Supprimer cette carte ?")) {
-                cards = cards.filter(c => c.id !== id);
-                closeEditor();
-                render();
-                save();
-            }
-        }
-
-        function clearAll() {
-            if(confirm("Attention : Cela va effacer TOUTES les cartes. Continuer ?")) {
-                cards = [];
-                render();
-                save();
-            }
-        }
-
-        function closeEditor() { 
-            document.getElementById('editor').classList.add('translate-x-full'); 
-            activeId = null; 
-        }
-
-        function save() { 
-            localStorage.setItem('edu_pro_cards_v2', JSON.stringify(cards)); 
-        }
-
-        function exportJSON() {
-            const dataStr = JSON.stringify(cards, null, 2);
-            const blob = new Blob([dataStr], {type: 'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `deck-export-${new Date().toLocaleDateString()}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        function exportCSV() {
-            let csv = "Question,Type,Options,Reponse\n";
-            cards.forEach(c => {
-                csv += `"${c.question.replace(/"/g, '""')}","${c.type}","${c.options.replace(/\n/g, ' | ')}","${c.answer.replace(/"/g, '""')}"\n`;
-            });
-            const blob = new Blob([csv], {type: 'text/csv'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'deck-flashcards.csv';
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        function exportPNG() {
-            const container = document.getElementById('deck');
-            const originalDisplay = container.style.display;
-            
-            // Créer un conteneur temporaire pour le rendu avec marge gauche
-            const tempDiv = document.createElement('div');
-            tempDiv.style.position = 'absolute';
-            tempDiv.style.left = '-9999px';
-            tempDiv.style.width = 'auto';
-            tempDiv.style.height = 'auto';
-            tempDiv.style.background = '#ffffff';
-            tempDiv.style.padding = '5mm 10mm';
-            tempDiv.style.display = 'flex';
-            tempDiv.style.flexDirection = 'column';
-            
-            // Wrapper pour chaque page de cartes (3x3)
-            let pageWrapper = null;
-            let cardCount = 0;
-            
-            cards.forEach((card, index) => {
-                if (cardCount % 9 === 0) {
-                    pageWrapper = document.createElement('div');
-                    pageWrapper.style.display = 'grid';
-                    pageWrapper.style.gridTemplateColumns = 'repeat(3, 60mm)';
-                    pageWrapper.style.gap = '10mm';
-                    pageWrapper.style.marginBottom = '20mm';
-                    tempDiv.appendChild(pageWrapper);
-                }
-                
-                const cardClone = container.querySelector(`[onclick="openEditor(${card.id})"]`)?.parentElement?.cloneNode(true);
-                if (cardClone && pageWrapper) {
-                    const cardEl = cardClone.querySelector('.card-fixed-size');
-                    if (cardEl) {
-                        cardEl.style.width = '60mm';
-                        cardEl.style.height = '85mm';
-                        cardEl.style.margin = '0';
-                        cardEl.style.padding = '3mm';
-                    }
-                    pageWrapper.appendChild(cardClone);
-                    cardCount++;
-                }
-            });
-            
-            document.body.appendChild(tempDiv);
-            
-            html2canvas(tempDiv, {
-                scale: 2,
-                useCORS: true,
-                allowTaint: true,
-                backgroundColor: '#ffffff',
-                windowWidth: 220 * 96 / 25.4
-            }).then(canvas => {
-                const link = document.createElement('a');
-                link.href = canvas.toDataURL('image/png');
-                link.download = `deck-cards-${new Date().toLocaleDateString()}.png`;
-                link.click();
-                document.body.removeChild(tempDiv);
-            }).catch(err => {
-                console.error('Erreur export PNG:', err);
-                alert('Erreur lors de l\'export PNG');
-                document.body.removeChild(tempDiv);
-            });
-        }
-
-        function importJSON(e) {
-            const reader = new FileReader();
-            reader.onload = (ev) => { 
-                try {
-                    const imported = JSON.parse(ev.target.result);
-                    cards = imported;
-                    render();
-                    save();
-                } catch(err) { alert("Erreur lors de l'importation du fichier."); }
-            };
-            reader.readAsText(e.target.files[0]);
-        }
-
-        window.onload = () => { 
-            if(cards.length === 0) addCard(); 
-            render(); 
+/* ------------ Modal de confirmation ------------ */
+function confirmDialog(title, body, confirmLabel = 'Confirmer', danger = true) {
+    return new Promise(resolve => {
+        const backdrop = $('modal-backdrop');
+        $('modalTitle').textContent = title;
+        $('modalBody').textContent = body;
+        const btn = $('modalConfirm');
+        btn.textContent = confirmLabel;
+        btn.className = `px-4 py-2 rounded-lg text-sm font-semibold ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'} text-white`;
+        const close = (val) => {
+            backdrop.classList.remove('open');
+            btn.onclick = null;
+            $('modalCancel').onclick = null;
+            document.removeEventListener('keydown', onKey);
+            resolve(val);
         };
-    </script>
+        const onKey = e => { if (e.key === 'Escape') close(false); };
+        btn.onclick = () => close(true);
+        $('modalCancel').onclick = () => close(false);
+        backdrop.classList.add('open');
+        document.addEventListener('keydown', onKey);
+        setTimeout(() => btn.focus(), 50);
+    });
+}
+
+/* ------------ Busy overlay ------------ */
+function busy(on, label = 'Génération en cours…') {
+    $('busy-label').textContent = label;
+    $('busy-overlay').classList.toggle('open', !!on);
+}
+
+/* ------------ Sidebar toggle (mobile) ------------ */
+function openSidebar() {
+    $('sidebar').classList.add('open');
+    $('sidebar-backdrop').classList.add('open');
+}
+function closeSidebar() {
+    $('sidebar').classList.remove('open');
+    $('sidebar-backdrop').classList.remove('open');
+}
+
+/* ------------ Settings ------------ */
+function setGlobalTitle(v) {
+    settings.globalTitle = v;
+    save();
+    render();
+}
+function onGlobalSettingChange() {
+    settings.borderColor = $('globalBorderColor').value;
+    settings.borderSize = parseInt($('globalBorderSize').value);
+    settings.radius = parseInt($('globalRadius').value);
+    save();
+    render();
+}
+function adjustSlider(id, delta) {
+    const slider = $(id);
+    const min = parseInt(slider.min);
+    const max = parseInt(slider.max);
+    slider.value = Math.max(min, Math.min(max, parseInt(slider.value) + delta));
+    onGlobalSettingChange();
+}
+
+/* ------------ Cards CRUD ------------ */
+function addCard() {
+    const card = ensureStyles({
+        id: uid(),
+        question: "Nouvelle question",
+        type: "multiple",
+        options: "Option A\nOption B",
+        answer: "La réponse ici",
+        image: null,
+        title: ''
+    });
+    cards.push(card);
+    save();
+    render();
+    closeSidebar();
+    toast("Carte ajoutée", 'success', 1500);
+}
+function duplicateCard(id) {
+    const original = cards.find(c => c.id === id);
+    if (!original) return;
+    const copy = JSON.parse(JSON.stringify(original));
+    copy.id = uid();
+    const idx = cards.findIndex(c => c.id === id);
+    cards.splice(idx + 1, 0, copy);
+    save();
+    render();
+    toast("Carte dupliquée", 'success', 1500);
+}
+function moveCard(id, direction) {
+    if ($('searchInput').value.trim()) {
+        toast("Effacez la recherche pour réordonner.", 'error', 2500);
+        return;
+    }
+    const idx = cards.findIndex(c => c.id === id);
+    if (direction === 'up' && idx > 0) {
+        [cards[idx], cards[idx - 1]] = [cards[idx - 1], cards[idx]];
+    } else if (direction === 'down' && idx < cards.length - 1) {
+        [cards[idx], cards[idx + 1]] = [cards[idx + 1], cards[idx]];
+    } else { return; }
+    save();
+    render();
+}
+async function deleteCard(id) {
+    const ok = await confirmDialog("Supprimer cette carte ?", "Cette action est définitive.", "Supprimer", true);
+    if (!ok) return;
+    const removed = cards.find(c => c.id === id);
+    cards = cards.filter(c => c.id !== id);
+    closeEditor();
+    save();
+    render();
+    toast("Carte supprimée", '', 4000, {
+        label: "Annuler",
+        handler: () => { cards.push(removed); save(); render(); toast("Carte restaurée", 'success', 1500); }
+    });
+}
+async function clearAll() {
+    if (cards.length === 0) return;
+    const ok = await confirmDialog("Effacer tout le deck ?", `Cela va supprimer ${cards.length} carte(s).`, "Tout effacer", true);
+    if (!ok) return;
+    const snapshot = JSON.parse(JSON.stringify(cards));
+    cards = [];
+    save();
+    render();
+    toast(`Deck effacé (${snapshot.length} cartes)`, '', 5000, {
+        label: "Annuler",
+        handler: () => { cards = snapshot; save(); render(); toast("Deck restauré", 'success', 1500); }
+    });
+}
+
+/* ------------ Render ------------ */
+function getFilteredCards() {
+    const search = $('searchInput').value.trim().toLowerCase();
+    if (!search) return cards;
+    return cards.filter(c =>
+        (c.question || '').toLowerCase().includes(search) ||
+        (c.answer || '').toLowerCase().includes(search) ||
+        (c.title || '').toLowerCase().includes(search)
+    );
+}
+function render() {
+    const container = $('deck');
+    const radius = settings.radius;
+    const borderCol = settings.borderColor;
+    const borderSize = settings.borderSize;
+
+    $('borderVal').innerText = borderSize + 'px';
+    $('radiusVal').innerText = radius + 'px';
+    $('globalBorderColor').value = borderCol;
+    $('globalBorderSize').value = borderSize;
+    $('globalRadius').value = radius;
+    if ($('globalTitleInput').value !== settings.globalTitle) $('globalTitleInput').value = settings.globalTitle;
+
+    const filtered = getFilteredCards();
+    const types = cards.reduce((acc, c) => { acc[c.type] = (acc[c.type] || 0) + 1; return acc; }, {});
+    const pages = Math.ceil(cards.length / 9);
+    $('stats').innerText = cards.length
+        ? `${cards.length} carte(s) · ${types.multiple || 0} QCM · ${types.boolean || 0} V/F · ${pages} page(s) A4`
+        : 'Aucune carte';
+
+    $('empty-state').classList.toggle('hidden', cards.length > 0);
+    $('search-empty').classList.toggle('hidden', !(cards.length > 0 && filtered.length === 0));
+    container.innerHTML = '';
+
+    filtered.forEach((card, idx) => {
+        ensureStyles(card);
+        const isPageBreak = !$('searchInput').value.trim() && idx > 0 && idx % 9 === 0;
+        const cardEl = document.createElement('div');
+        cardEl.className = 'card-container group relative' + (isPageBreak ? ' page-break' : '');
+        cardEl.dataset.cardId = card.id;
+
+        const innerStyle = `
+            border-radius: ${radius}px;
+            border: ${borderSize}px solid ${borderCol};
+            background-color: ${card.bgColor};
+        `;
+
+        let optionsHtml = '';
+        if (card.type === 'multiple') {
+            const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+            optionsHtml = lines.map((l, i) => `
+                <div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-decoration:${card.styleOptions.underline ? 'underline' : 'none'};" class="text-left w-full px-1 leading-snug">
+                    <span class="font-bold mr-1">${ALPHABET[i] || '•'})</span>${escapeHtml(l)}
+                </div>`).join('');
+        } else {
+            optionsHtml = `<div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};" class="italic">Vrai ou Faux ?</div>`;
+        }
+
+        const titleText = card.title?.trim() || settings.globalTitle;
+
+        cardEl.innerHTML = `
+            <div class="card-hover-tools no-print absolute -top-3 left-1/2 -translate-x-1/2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition z-10">
+                <button aria-label="Monter" onclick="moveCard('${card.id}', 'up')" class="p-2 bg-white shadow-md rounded-full hover:text-indigo-600">
+                    <i data-lucide="arrow-up" class="w-3.5 h-3.5"></i>
+                </button>
+                <button aria-label="Dupliquer" onclick="duplicateCard('${card.id}')" class="p-2 bg-white shadow-md rounded-full hover:text-green-600">
+                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                </button>
+                <button aria-label="Auto-ajuster cette carte" onclick="autoRescaleOne('${card.id}')" class="p-2 bg-white shadow-md rounded-full hover:text-violet-600">
+                    <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+                </button>
+                <button aria-label="Descendre" onclick="moveCard('${card.id}', 'down')" class="p-2 bg-white shadow-md rounded-full hover:text-indigo-600">
+                    <i data-lucide="arrow-down" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+            <div role="button" tabindex="0" onclick="openEditor('${card.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEditor('${card.id}')}" class="card-fixed-size shadow-sm hover:shadow-xl cursor-pointer mx-auto" style="${innerStyle}" aria-label="Éditer la carte ${escapeAttr(titleText)}">
+                <div class="w-full text-center mb-2 leading-tight" style="font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};text-decoration:${card.styleTitle.underline ? 'underline' : 'none'};">
+                    ${escapeHtml(titleText)}
+                </div>
+                <div class="flex-1 flex flex-col items-center gap-3 text-center overflow-hidden">
+                    ${card.image ? `<img src="${escapeAttr(card.image)}" style="width:${card.imgSize}%;max-height:40%;" class="object-contain rounded-lg" alt="">` : ''}
+                    <div class="leading-snug" style="font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};text-decoration:${card.styleQ.underline ? 'underline' : 'none'};">
+                        ${escapeHtml(card.question)}
+                    </div>
+                    <div class="w-full flex flex-col gap-1 mt-1">${optionsHtml}</div>
+                </div>
+                <div class="mt-auto pt-3 border-t border-gray-100 flex flex-col items-center">
+                    <div class="upside-down text-center leading-snug" style="font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};text-decoration:${card.styleA.underline ? 'underline' : 'none'};">
+                        ${escapeHtml(card.answer)}
+                    </div>
+                </div>
+                <div class="card-edit-hint">✏ Cliquer pour éditer</div>
+            </div>
+        `;
+        container.appendChild(cardEl);
+    });
+
+    if (window.lucide) lucide.createIcons();
+}
+
+/* ------------ Editor ------------ */
+function openEditor(id) {
+    activeId = id;
+    const card = cards.find(c => c.id === id);
+    if (!card) return;
+    ensureStyles(card);
+
+    const editor = $('editor');
+    editor.classList.remove('translate-x-full');
+    editor.setAttribute('aria-hidden', 'false');
+    renderEditor();
+}
+function closeEditor() {
+    $('editor').classList.add('translate-x-full');
+    $('editor').setAttribute('aria-hidden', 'true');
+    activeId = null;
+}
+function renderEditor() {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+
+    $('editorContent').innerHTML = `
+        <div class="space-y-6">
+            <div class="p-4 bg-gray-50 rounded-xl space-y-4">
+                <label class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">Apparence</label>
+                <div class="flex items-center justify-between">
+                    <label for="cardBgColor" class="text-sm text-gray-700">Fond de la carte</label>
+                    <input id="cardBgColor" type="color" value="${escapeAttr(card.bgColor)}" onchange="updateProp('bgColor', this.value)" class="w-9 h-9 rounded-lg cursor-pointer border border-gray-200">
+                </div>
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs text-gray-600">
+                        <label for="cardImgInput">Image</label>
+                        <span class="font-bold text-indigo-600">${card.imgSize}%</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input id="cardImgInput" type="file" accept="image/*" onchange="uploadImg(event)" class="text-xs w-full">
+                        ${card.image ? `<button onclick="updateProp('image', null);renderEditor()" aria-label="Supprimer l'image" class="p-1.5 border border-gray-200 rounded hover:bg-white"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button aria-label="Réduire image" onclick="adjustEditorSlider('imgSize', -5)" class="w-9 h-9 bg-white border rounded">−</button>
+                        <input type="range" min="30" max="150" value="${card.imgSize}" oninput="updateProp('imgSize', parseInt(this.value), false)" onchange="renderEditor()" class="flex-1 accent-indigo-600">
+                        <button aria-label="Augmenter image" onclick="adjustEditorSlider('imgSize', 5)" class="w-9 h-9 bg-white border rounded">+</button>
+                    </div>
+                </div>
+            </div>
+
+            ${textBlock('Titre', 'title', card.title || '', 'styleTitle', card.styleTitle, false)}
+            ${textBlock('Question', 'question', card.question || '', 'styleQ', card.styleQ, true)}
+
+            <div class="space-y-3">
+                <label class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">Type & options</label>
+                <select aria-label="Type de carte" onchange="updateType(this.value)" class="w-full border border-gray-200 p-2.5 rounded-lg text-sm bg-white">
+                    <option value="multiple" ${card.type === 'multiple' ? 'selected' : ''}>Choix multiples (QCM)</option>
+                    <option value="boolean" ${card.type === 'boolean' ? 'selected' : ''}>Vrai / Faux</option>
+                </select>
+                ${card.type === 'multiple' ? `
+                    <textarea aria-label="Options (une par ligne)" oninput="updateProp('options', this.value)" placeholder="Une option par ligne…" class="w-full border border-gray-200 p-3 rounded-lg text-xs font-mono h-28 outline-none focus:ring-2 focus:ring-indigo-100">${escapeHtml(card.options || '')}</textarea>
+                ` : `
+                    <div class="flex gap-2">
+                        <button onclick="updateProp('answer', 'Vrai');renderEditor()" class="flex-1 py-2 rounded-lg text-sm font-semibold ${card.answer === 'Vrai' ? 'bg-indigo-600 text-white' : 'border border-gray-200 hover:bg-gray-50'}">Vrai</button>
+                        <button onclick="updateProp('answer', 'Faux');renderEditor()" class="flex-1 py-2 rounded-lg text-sm font-semibold ${card.answer === 'Faux' ? 'bg-indigo-600 text-white' : 'border border-gray-200 hover:bg-gray-50'}">Faux</button>
+                    </div>
+                `}
+                ${card.type === 'multiple' ? styleRow('styleOptions', card.styleOptions, 'Choix') : ''}
+            </div>
+
+            ${card.type === 'multiple' ? textBlock('Réponse', 'answer', card.answer || '', 'styleA', card.styleA, false) : `
+                <div class="space-y-3">
+                    <label class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">Style de la réponse</label>
+                    ${styleRow('styleA', card.styleA, 'Réponse')}
+                </div>
+            `}
+
+            <div class="flex gap-2">
+                <button onclick="autoRescaleOne('${card.id}')" class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 flex items-center justify-center gap-2">
+                    <i data-lucide="wand-2" class="w-4 h-4"></i> Auto-ajuster
+                </button>
+                <button onclick="duplicateCard('${card.id}')" class="flex-1 py-2.5 rounded-lg text-sm font-semibold border border-gray-200 hover:bg-gray-50 flex items-center justify-center gap-2">
+                    <i data-lucide="copy" class="w-4 h-4"></i> Dupliquer
+                </button>
+            </div>
+            <button onclick="deleteCard('${card.id}')" class="w-full py-3 text-red-600 bg-red-50 rounded-xl text-sm font-bold hover:bg-red-100 transition">
+                Supprimer la carte
+            </button>
+        </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+}
+
+function textBlock(label, key, value, styleTarget, styleObj, multiline) {
+    const inputId = `ed_${key}`;
+    const field = multiline
+        ? `<textarea id="${inputId}" oninput="updateProp('${key}', this.value)" class="w-full border border-gray-200 p-3 rounded-lg text-sm h-20 outline-none focus:ring-2 focus:ring-indigo-100">${escapeHtml(value)}</textarea>`
+        : `<input id="${inputId}" type="text" value="${escapeAttr(value)}" oninput="updateProp('${key}', this.value)" class="w-full border border-gray-200 p-3 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">`;
+    return `
+        <div class="space-y-3">
+            <label for="${inputId}" class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">${label}</label>
+            ${field}
+            ${styleRow(styleTarget, styleObj, label)}
+        </div>
+    `;
+}
+function styleRow(target, styleObj, label) {
+    return `
+        <div class="flex items-center gap-2 flex-wrap">
+            <div class="flex gap-1" role="group" aria-label="Style ${escapeAttr(label)}">
+                <button aria-label="Gras" aria-pressed="${styleObj.weight === 'bold'}" onclick="toggleStyle('${target}', 'weight')" class="w-9 h-9 border rounded ${styleObj.weight === 'bold' ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="bold" class="w-3.5 h-3.5 inline"></i></button>
+                <button aria-label="Italique" aria-pressed="${styleObj.italic}" onclick="toggleStyle('${target}', 'italic')" class="w-9 h-9 border rounded ${styleObj.italic ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="italic" class="w-3.5 h-3.5 inline"></i></button>
+                <button aria-label="Souligné" aria-pressed="${styleObj.underline}" onclick="toggleStyle('${target}', 'underline')" class="w-9 h-9 border rounded ${styleObj.underline ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="underline" class="w-3.5 h-3.5 inline"></i></button>
+            </div>
+            <div class="flex items-center border rounded px-1 ml-auto">
+                <button aria-label="Réduire taille" onclick="adjustStyleSlider('${target}', 'size', -1)" class="w-7 h-7 text-sm">−</button>
+                <span class="w-10 text-center text-xs font-bold">${styleObj.size}px</span>
+                <button aria-label="Augmenter taille" onclick="adjustStyleSlider('${target}', 'size', 1)" class="w-7 h-7 text-sm">+</button>
+            </div>
+            <input type="color" aria-label="Couleur ${escapeAttr(label)}" value="${escapeAttr(styleObj.color)}" onchange="updateStyle('${target}', 'color', this.value)" class="w-9 h-9 rounded cursor-pointer border border-gray-200">
+        </div>
+    `;
+}
+
+function adjustEditorSlider(prop, delta) {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    card[prop] = Math.max(30, Math.min(150, parseInt(card[prop]) + delta));
+    save();
+    render();
+    renderEditor();
+}
+function adjustStyleSlider(target, prop, delta) {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    ensureStyles(card);
+    const cur = parseInt(card[target][prop]) || 12;
+    card[target][prop] = Math.max(8, Math.min(48, cur + delta));
+    save();
+    render();
+    renderEditor();
+}
+function updateProp(key, val, doSave = true) {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    card[key] = val;
+    if (doSave) save();
+    render();
+}
+function updateType(newType) {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    card.type = newType;
+    if (newType === 'boolean' && card.answer !== 'Vrai' && card.answer !== 'Faux') card.answer = 'Vrai';
+    save();
+    render();
+    renderEditor();
+}
+function updateStyle(target, prop, val) {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    ensureStyles(card);
+    if (prop === 'size') val = Math.max(8, Math.min(48, parseInt(val)));
+    card[target][prop] = val;
+    save();
+    render();
+}
+function toggleStyle(target, prop) {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    ensureStyles(card);
+    if (prop === 'weight') card[target][prop] = card[target][prop] === 'bold' ? 'normal' : 'bold';
+    else card[target][prop] = !card[target][prop];
+    save();
+    render();
+    renderEditor();
+}
+function uploadImg(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+        toast("Image > 2 Mo : risque de saturer le stockage.", 'error', 4000);
+    }
+    const reader = new FileReader();
+    reader.onload = () => { updateProp('image', reader.result); renderEditor(); };
+    reader.readAsDataURL(file);
+}
+
+/* ============================================================
+   AUTO-RESCALE PRO
+   Mesure le contenu vs container et réduit les tailles
+   jusqu'à ce que tout rentre dans une carte 320×450 (ratio preview).
+   ============================================================ */
+function measureCardOverflow(card) {
+    // Construit une carte hors écran à taille réelle preview
+    const probe = document.createElement('div');
+    probe.style.cssText = `
+        position:absolute;left:-99999px;top:0;
+        width:320px;height:auto;
+        padding:20px;display:flex;flex-direction:column;
+        background:white;box-sizing:border-box;
+        font-family:'Plus Jakarta Sans',sans-serif;
+    `;
+    const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+    const optionsHtml = card.type === 'multiple'
+        ? lines.map((l, i) => `<div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};">${ALPHABET[i] || '•'}) ${escapeHtml(l)}</div>`).join('')
+        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;">Vrai ou Faux ?</div>`;
+    const titleText = card.title?.trim() || settings.globalTitle;
+    probe.innerHTML = `
+        <div style="text-align:center;margin-bottom:8px;font-size:${card.styleTitle.size}px;font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};line-height:1.2;">${escapeHtml(titleText)}</div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;">
+            ${card.image ? `<img src="${escapeAttr(card.image)}" style="width:${card.imgSize}%;max-height:40%;object-fit:contain;">` : ''}
+            <div style="font-size:${card.styleQ.size}px;font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};line-height:1.25;">${escapeHtml(card.question)}</div>
+            <div style="display:flex;flex-direction:column;gap:4px;width:100%;">${optionsHtml}</div>
+        </div>
+        <div style="margin-top:auto;padding-top:12px;border-top:1px solid #f1f5f9;text-align:center;">
+            <div style="transform:rotate(180deg);font-size:${card.styleA.size}px;font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};">${escapeHtml(card.answer)}</div>
+        </div>
+    `;
+    document.body.appendChild(probe);
+    const overflow = probe.scrollHeight - 450;
+    document.body.removeChild(probe);
+    return overflow; // > 0 = overflow
+}
+
+function rescaleCard(card) {
+    ensureStyles(card);
+    let safety = 30;
+    // 1) Réduire tailles options + question + title proportionnellement
+    while (measureCardOverflow(card) > 0 && safety-- > 0) {
+        let changed = false;
+        if (card.styleQ.size > 10) { card.styleQ.size -= 1; changed = true; }
+        if (card.styleOptions.size > 9) { card.styleOptions.size -= 1; changed = true; }
+        if (card.styleTitle.size > 12 && safety % 2 === 0) { card.styleTitle.size -= 1; changed = true; }
+        if (card.styleA.size > 9 && safety % 3 === 0) { card.styleA.size -= 1; changed = true; }
+        if (!changed) break;
+    }
+    // 2) Si toujours overflow + image présente : réduire l'image
+    safety = 12;
+    while (measureCardOverflow(card) > 0 && card.image && card.imgSize > 40 && safety-- > 0) {
+        card.imgSize -= 5;
+    }
+    return measureCardOverflow(card) <= 0;
+}
+
+async function autoRescaleAll() {
+    if (cards.length === 0) { toast("Aucune carte à ajuster.", 'error'); return; }
+    const snapshot = JSON.parse(JSON.stringify(cards));
+    busy(true, `Ajustement de ${cards.length} carte(s)…`);
+    await new Promise(r => requestAnimationFrame(r));
+    let success = 0;
+    cards.forEach(c => { if (rescaleCard(c)) success++; });
+    save();
+    render();
+    busy(false);
+    toast(`${success}/${cards.length} carte(s) ajustée(s)`, 'success', 5000, {
+        label: "Annuler",
+        handler: () => { cards = snapshot; cards.forEach(ensureStyles); save(); render(); toast("Tailles restaurées", 'success', 1500); }
+    });
+}
+function autoRescaleOne(id) {
+    const card = cards.find(c => c.id === id);
+    if (!card) return;
+    const snapshot = JSON.parse(JSON.stringify(card));
+    const ok = rescaleCard(card);
+    save();
+    render();
+    if (activeId === id) renderEditor();
+    toast(ok ? "Carte ajustée" : "Ajustement limite atteinte", ok ? 'success' : '', 3500, {
+        label: "Annuler",
+        handler: () => {
+            const idx = cards.findIndex(c => c.id === id);
+            cards[idx] = snapshot;
+            save(); render(); if (activeId === id) renderEditor();
+        }
+    });
+}
+
+/* ============================================================
+   EXPORTS
+   ============================================================ */
+function safeFilename(base) {
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return `${base}-${stamp}`;
+}
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function exportJSON() {
+    if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
+    const payload = {
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        settings,
+        cards
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    downloadBlob(blob, safeFilename('deck-educards') + '.json');
+    toast(`Deck exporté (${cards.length} cartes)`, 'success');
+}
+
+function exportCSV() {
+    if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
+    const sep = ';'; // FR/Excel friendly
+    const esc = v => {
+        const s = String(v ?? '');
+        return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    let csv = '﻿' + ['Titre','Question','Type','Options','Reponse'].map(esc).join(sep) + '\r\n';
+    cards.forEach(c => {
+        const title = c.title?.trim() || settings.globalTitle;
+        csv += [title, c.question, c.type, (c.options || '').replace(/\n/g, ' | '), c.answer].map(esc).join(sep) + '\r\n';
+    });
+    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), safeFilename('deck-educards') + '.csv');
+    toast(`CSV exporté (${cards.length} cartes)`, 'success');
+}
+
+async function renderCardsToPrintLayout() {
+    // Construit un layout offscreen pixel-perfect pour PNG/PDF (A4 = 210x297 mm)
+    const PX_PER_MM = 3.7795275591; // 96 dpi
+    const A4_W = 210 * PX_PER_MM;
+    const A4_H = 297 * PX_PER_MM;
+    const CARD_W = 60 * PX_PER_MM;
+    const CARD_H = 85 * PX_PER_MM;
+
+    const pages = [];
+    const groups = [];
+    for (let i = 0; i < cards.length; i += 9) groups.push(cards.slice(i, i + 9));
+
+    const root = document.createElement('div');
+    root.style.cssText = `position:fixed;left:-99999px;top:0;background:white;font-family:'Plus Jakarta Sans',sans-serif;`;
+    document.body.appendChild(root);
+
+    for (const group of groups) {
+        const page = document.createElement('div');
+        page.style.cssText = `
+            width:${A4_W}px;height:${A4_H}px;
+            background:white;
+            display:grid;
+            grid-template-columns:repeat(3, ${CARD_W}px);
+            grid-auto-rows:${CARD_H}px;
+            gap:${8*PX_PER_MM}px ${6*PX_PER_MM}px;
+            justify-content:center;align-content:start;
+            padding:${10*PX_PER_MM}px 0;
+            box-sizing:border-box;
+        `;
+        group.forEach(card => {
+            ensureStyles(card);
+            const titleText = card.title?.trim() || settings.globalTitle;
+            const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+            const optionsHtml = card.type === 'multiple'
+                ? lines.map((l, i) => `<div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-align:left;line-height:1.3;"><b>${ALPHABET[i] || '•'})</b> ${escapeHtml(l)}</div>`).join('')
+                : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;color:${card.styleOptions.color};">Vrai ou Faux ?</div>`;
+
+            const div = document.createElement('div');
+            div.style.cssText = `
+                width:${CARD_W}px;height:${CARD_H}px;
+                background:${card.bgColor};
+                border:${settings.borderSize}px solid ${settings.borderColor};
+                border-radius:${settings.radius}px;
+                padding:${3*PX_PER_MM}px;
+                box-sizing:border-box;
+                display:flex;flex-direction:column;
+                overflow:hidden;
+            `;
+            div.innerHTML = `
+                <div style="text-align:center;margin-bottom:4px;font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};line-height:1.2;">${escapeHtml(titleText)}</div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;overflow:hidden;">
+                    ${card.image ? `<img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:40%;object-fit:contain;">` : ''}
+                    <div style="font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};line-height:1.25;">${escapeHtml(card.question)}</div>
+                    <div style="display:flex;flex-direction:column;gap:2px;width:100%;padding:0 4px;">${optionsHtml}</div>
+                </div>
+                <div style="margin-top:auto;padding-top:4px;border-top:1px solid #eee;text-align:center;">
+                    <div style="transform:rotate(180deg);font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};">${escapeHtml(card.answer)}</div>
+                </div>
+            `;
+            page.appendChild(div);
+        });
+        root.appendChild(page);
+        pages.push(page);
+    }
+    // Attendre que les images chargent
+    const imgs = root.querySelectorAll('img');
+    await Promise.all([...imgs].map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
+    return { root, pages };
+}
+
+async function exportPNG() {
+    if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
+    busy(true, "Génération du PNG…");
+    try {
+        const { root, pages } = await renderCardsToPrintLayout();
+        if (pages.length === 1) {
+            const canvas = await html2canvas(pages[0], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+            canvas.toBlob(b => downloadBlob(b, safeFilename('deck-educards') + '.png'), 'image/png');
+        } else {
+            // Plusieurs pages : un PNG par page
+            for (let i = 0; i < pages.length; i++) {
+                const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+                await new Promise(res => canvas.toBlob(b => {
+                    downloadBlob(b, safeFilename('deck-educards') + `-p${i+1}.png`);
+                    res();
+                }, 'image/png'));
+            }
+        }
+        document.body.removeChild(root);
+        toast(`PNG exporté (${pages.length} page${pages.length>1?'s':''})`, 'success');
+    } catch (err) {
+        console.error(err);
+        toast("Erreur lors de l'export PNG.", 'error', 5000);
+    } finally {
+        busy(false);
+    }
+}
+
+async function exportPDF() {
+    if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
+    if (!window.jspdf) { toast("Bibliothèque PDF non chargée.", 'error'); return; }
+    busy(true, "Génération du PDF…");
+    try {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const { root, pages } = await renderCardsToPrintLayout();
+        for (let i = 0; i < pages.length; i++) {
+            const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+            const imgData = canvas.toDataURL('image/jpeg', 0.92);
+            if (i > 0) pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+        }
+        document.body.removeChild(root);
+        pdf.save(safeFilename('deck-educards') + '.pdf');
+        toast(`PDF exporté (${pages.length} page${pages.length>1?'s':''})`, 'success');
+    } catch (err) {
+        console.error(err);
+        toast("Erreur lors de l'export PDF.", 'error', 5000);
+    } finally {
+        busy(false);
+    }
+}
+
+function printDeck() {
+    if (cards.length === 0) { toast("Aucune carte à imprimer.", 'error'); return; }
+    if ($('searchInput').value.trim()) {
+        toast("Recherche active : seules les cartes filtrées seront imprimées.", '', 4000);
+    }
+    window.print();
+}
+
+/* ------------ Import ------------ */
+async function importJSON(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = ''; // reset for re-import
+    const text = await file.text();
+    let imported;
+    try { imported = JSON.parse(text); } catch { toast("Fichier JSON invalide.", 'error'); return; }
+
+    // Support v1 (array) et v2 ({version, settings, cards})
+    let newCards, newSettings = null;
+    if (Array.isArray(imported)) newCards = imported;
+    else if (imported && Array.isArray(imported.cards)) { newCards = imported.cards; newSettings = imported.settings; }
+    else { toast("Schéma JSON non reconnu.", 'error'); return; }
+
+    if (!newCards.every(c => c && typeof c.question === 'string')) {
+        toast("Fichier contient des entrées invalides.", 'error'); return;
+    }
+
+    const ok = cards.length === 0
+        ? true
+        : await confirmDialog("Remplacer le deck actuel ?", `Cela va écraser ${cards.length} carte(s) par ${newCards.length} importée(s).`, "Remplacer", true);
+    if (!ok) return;
+
+    cards = newCards.map(c => ensureStyles({ ...c, id: c.id || uid() }));
+    if (newSettings) settings = { ...settings, ...newSettings };
+    save();
+    render();
+    toast(`Deck importé (${cards.length} cartes)`, 'success');
+}
+
+/* ============================================================
+   TUTORIEL
+   ============================================================ */
+const tutorialSteps = [
+    { title: "Bienvenue dans EduCards", body: "Un créateur de flashcards pour cours, révisions et quiz. Suivez ce tour rapide (6 étapes).", target: null },
+    { title: "Cliquez sur une carte", body: "Chaque carte est cliquable : ouvrez l'éditeur pour modifier titre, question, options et réponse.", target: () => document.querySelector('.card-container .card-fixed-size') },
+    { title: "Personnalisez avec le panneau", body: "Tailles de police, couleurs, image, style gras/italique/souligné — par champ.", target: () => $('editor') },
+    { title: "Auto-ajuster (pro)", body: "Trop de texte qui déborde ? Un clic ajuste automatiquement les tailles pour que tout rentre dans la carte.", target: () => document.querySelector('[data-tutorial="autoscale"]') },
+    { title: "Exportez vos cartes", body: "JSON pour sauvegarder, CSV pour Excel, PNG pour partager, PDF pour imprimer/partager proprement.", target: () => document.querySelector('[data-tutorial="export"]') },
+    { title: "Imprimez vos flashcards", body: "Format A4 · 9 cartes par page (3×3) · prêt à découper. La réponse s'imprime à l'envers au verso.", target: () => document.querySelector('[data-tutorial="print"]') }
+];
+let tutoIndex = 0;
+
+function startTutorial() {
+    tutoIndex = 0;
+    // S'il n'y a pas de cartes, on en ajoute une pour le tour
+    if (cards.length === 0) addCard();
+    $('tutorial-overlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    renderTutorialStep();
+    document.addEventListener('keydown', tutoKeyHandler);
+}
+function endTutorial() {
+    $('tutorial-overlay').classList.remove('open');
+    document.body.style.overflow = '';
+    localStorage.setItem(TUTO_KEY, '1');
+    document.removeEventListener('keydown', tutoKeyHandler);
+}
+function tutoKeyHandler(e) {
+    if (e.key === 'Escape') endTutorial();
+    else if (e.key === 'ArrowRight' || e.key === 'Enter') $('tutoNext').click();
+    else if (e.key === 'ArrowLeft') $('tutoPrev').click();
+}
+
+function renderTutorialStep() {
+    const step = tutorialSteps[tutoIndex];
+    $('tutoStep').textContent = `Étape ${tutoIndex + 1} / ${tutorialSteps.length}`;
+    $('tutoTitle').textContent = step.title;
+    $('tutoBody').textContent = step.body;
+    $('tutoPrev').disabled = tutoIndex === 0;
+    $('tutoPrev').style.opacity = tutoIndex === 0 ? '.5' : '1';
+    $('tutoNext').textContent = tutoIndex === tutorialSteps.length - 1 ? "Terminer" : "Suivant";
+
+    const spotEl = $('tutorial-spotlight-el');
+    const mask = $('tutorial-mask');
+    let targetEl = step.target ? step.target() : null;
+    if (window.innerWidth < 1024 && targetEl && targetEl.closest('#sidebar')) {
+        openSidebar();
+        setTimeout(() => positionTuto(step.target ? step.target() : null), 350);
+        return;
+    }
+    positionTuto(targetEl);
+}
+function positionTuto(targetEl) {
+    const spotEl = $('tutorial-spotlight-el');
+    const bubble = $('tutorial-bubble');
+    if (!targetEl) {
+        spotEl.style.display = 'none';
+        bubble.style.top = '50%';
+        bubble.style.left = '50%';
+        bubble.style.transform = 'translate(-50%, -50%)';
+        return;
+    }
+    bubble.style.transform = '';
+    const r = targetEl.getBoundingClientRect();
+    spotEl.style.display = 'block';
+    spotEl.style.top = (r.top - 6) + 'px';
+    spotEl.style.left = (r.left - 6) + 'px';
+    spotEl.style.width = (r.width + 12) + 'px';
+    spotEl.style.height = (r.height + 12) + 'px';
+
+    // Position bubble en fonction de l'espace dispo
+    const bw = 360, bh = 180;
+    let top = r.bottom + 16;
+    let left = Math.max(16, Math.min(window.innerWidth - bw - 16, r.left));
+    if (top + bh > window.innerHeight - 16) top = Math.max(16, r.top - bh - 16);
+    bubble.style.top = top + 'px';
+    bubble.style.left = left + 'px';
+}
+
+$('tutoNext').onclick = () => {
+    if (tutoIndex < tutorialSteps.length - 1) { tutoIndex++; renderTutorialStep(); }
+    else endTutorial();
+};
+$('tutoPrev').onclick = () => { if (tutoIndex > 0) { tutoIndex--; renderTutorialStep(); } };
+$('tutoSkip').onclick = endTutorial;
+window.addEventListener('resize', () => {
+    if ($('tutorial-overlay').classList.contains('open')) renderTutorialStep();
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
+$('open-sidebar').onclick = openSidebar;
+$('close-sidebar').onclick = closeSidebar;
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        if (!$('editor').classList.contains('translate-x-full')) closeEditor();
+        else if ($('sidebar').classList.contains('open')) closeSidebar();
+    }
+});
+
+loadState();
+render();
+if (window.lucide) lucide.createIcons();
+
+// Lancement automatique du tutoriel à la 1ère visite
+if (!localStorage.getItem(TUTO_KEY)) {
+    setTimeout(startTutorial, 400);
+}
+</script>
 </body>
 </html>
