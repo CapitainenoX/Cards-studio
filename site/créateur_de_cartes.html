@@ -1158,33 +1158,101 @@ function downloadBlob(blob, filename) {
     a.href = url;
     a.download = filename;
     a.rel = 'noopener';
-    a.target = '_blank'; // iOS : ouvre dans nouvel onglet si download ignoré → user peut sauver
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // Revoke différé : iOS/Android peuvent encore lire l'URL après le click
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function openBlobInNewTab(blob) {
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return !!w;
+}
+async function tryNativeShare(blob, filename, mimeType) {
+    if (!navigator.share) return false;
+    try {
+        const file = new File([blob], filename, { type: mimeType || blob.type || 'application/octet-stream' });
+        const data = { files: [file], title: filename };
+        // canShare est optionnel — certains browsers (Firefox Android) ne l'exposent pas
+        if (navigator.canShare && !navigator.canShare(data)) return false;
+        await navigator.share(data);
+        return true;
+    } catch (err) {
+        if (err.name === 'AbortError') return 'cancelled';
+        return false;
+    }
+}
+function showDeliveryModal(blob, filename, mimeType) {
+    return new Promise(resolve => {
+        const sizeKB = Math.round(blob.size / 1024);
+        const sizeStr = sizeKB > 1024 ? `${(sizeKB/1024).toFixed(1)} Mo` : `${sizeKB} Ko`;
+        const modal = document.createElement('div');
+        modal.className = 'modal-backdrop open';
+        modal.style.zIndex = '200';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                        <i data-lucide="file-check-2" class="w-5 h-5 text-indigo-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold">Fichier prêt</h3>
+                        <p class="text-xs text-gray-500">${escapeHtml(filename)} · ${sizeStr}</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">Sur mobile, le partage natif est le plus fiable (Photos, Files, AirDrop…). Sinon « Ouvrir » affiche le fichier dans un onglet — utilisez le menu du navigateur pour l'enregistrer.</p>
+                <div class="flex flex-col gap-2">
+                    ${navigator.share ? `<button data-act="share" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2"><i data-lucide="share-2" class="w-4 h-4"></i> Partager</button>` : ''}
+                    <button data-act="download" class="w-full py-3 border border-gray-200 rounded-xl font-semibold flex items-center justify-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> Télécharger</button>
+                    <button data-act="open" class="w-full py-3 border border-gray-200 rounded-xl font-semibold flex items-center justify-center gap-2"><i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir dans un onglet</button>
+                    <button data-act="cancel" class="w-full py-2 text-gray-500 text-sm">Fermer</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        if (window.lucide) lucide.createIcons();
+
+        const cleanup = (result) => {
+            try { document.body.removeChild(modal); } catch {}
+            resolve(result);
+        };
+        modal.addEventListener('click', async e => {
+            if (e.target === modal) return cleanup('cancelled');
+            const btn = e.target.closest('[data-act]');
+            if (!btn) return;
+            const act = btn.dataset.act;
+            if (act === 'share') {
+                const r = await tryNativeShare(blob, filename, mimeType);
+                if (r === true) cleanup('shared');
+                else if (r === 'cancelled') cleanup('cancelled');
+                else { toast("Partage indisponible — essayez Télécharger ou Ouvrir.", 'error', 4000); }
+            } else if (act === 'download') {
+                downloadBlob(blob, filename);
+                cleanup('downloaded');
+            } else if (act === 'open') {
+                const ok = openBlobInNewTab(blob);
+                if (!ok) toast("Ouverture bloquée par le navigateur.", 'error', 4000);
+                else cleanup('opened');
+            } else {
+                cleanup('cancelled');
+            }
+        });
+    });
 }
 async function deliverBlob(blob, filename, mimeType) {
-    // Sur mobile : essayer le Web Share API (sheet natif iOS/Android, partage vers Files, AirDrop, WhatsApp…)
-    if (isLikelyMobile() && navigator.canShare) {
-        try {
-            const file = new File([blob], filename, { type: mimeType || blob.type || 'application/octet-stream' });
-            if (navigator.canShare({ files: [file] })) {
-                await navigator.share({ files: [file], title: filename });
-                return 'shared';
-            }
-        } catch (err) {
-            if (err.name === 'AbortError') return 'cancelled';
-            // sinon : on bascule sur download
-        }
+    // Mobile : modal avec choix (chaque clic = activation utilisateur fraîche, requis par iOS Safari)
+    if (isLikelyMobile()) {
+        return await showDeliveryModal(blob, filename, mimeType);
     }
+    // Desktop : download direct
     downloadBlob(blob, filename);
     return 'downloaded';
 }
 function deliveredMsg(result, label) {
     if (result === 'shared') return `${label} partagé`;
-    if (result === 'cancelled') return `${label} : partage annulé`;
+    if (result === 'opened') return `${label} ouvert dans un onglet`;
+    if (result === 'cancelled') return `${label} : annulé`;
     return `${label} téléchargé`;
 }
 
@@ -1439,34 +1507,80 @@ function openPrintOptions() {
 function closePrintOptions() { $('print-options-backdrop').classList.remove('open'); }
 
 /* ------------ Import ------------ */
+function normalizeImportedCard(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    // Accepte plusieurs noms de champs (anciens decks, variantes)
+    const question = raw.question ?? raw.q ?? raw.front ?? raw.recto ?? raw.prompt ?? '';
+    const answer = raw.answer ?? raw.a ?? raw.back ?? raw.verso ?? raw.solution ?? '';
+    // Rejette les entrées sans question ni réponse
+    if (!String(question).trim() && !String(answer).trim()) return null;
+
+    // Options : peut être string avec \n, tableau, ou rien
+    let options = '';
+    if (Array.isArray(raw.options)) options = raw.options.join('\n');
+    else if (typeof raw.options === 'string') options = raw.options;
+    else if (Array.isArray(raw.choices)) options = raw.choices.join('\n');
+    else if (typeof raw.choices === 'string') options = raw.choices;
+
+    let type = raw.type;
+    if (type !== 'multiple' && type !== 'boolean') {
+        type = options.trim() ? 'multiple' : 'boolean';
+    }
+
+    return {
+        id: sanitizeId(raw.id),
+        question: String(question),
+        answer: String(answer),
+        type,
+        options,
+        image: typeof raw.image === 'string' ? raw.image : null,
+        bgColor: typeof raw.bgColor === 'string' ? raw.bgColor : DEFAULTS.bgColor,
+        title: typeof raw.title === 'string' ? raw.title : '',
+        imgSize: Number.isFinite(raw.imgSize) ? raw.imgSize : DEFAULTS.imgSize,
+        styleQ: { ...DEFAULTS.styleQ, ...(raw.styleQ || {}) },
+        styleA: { ...DEFAULTS.styleA, ...(raw.styleA || {}) },
+        styleTitle: { ...DEFAULTS.styleTitle, ...(raw.styleTitle || {}) },
+        styleOptions: { ...DEFAULTS.styleOptions, ...(raw.styleOptions || {}) }
+    };
+}
+
 async function importJSON(e) {
     const file = e.target.files[0];
     if (!file) return;
-    e.target.value = ''; // reset for re-import
-    const text = await file.text();
+    e.target.value = '';
+    let text;
+    try { text = await file.text(); } catch { toast("Lecture du fichier impossible.", 'error'); return; }
     let imported;
     try { imported = JSON.parse(text); } catch { toast("Fichier JSON invalide.", 'error'); return; }
 
-    // Support v1 (array) et v2 ({version, settings, cards})
-    let newCards, newSettings = null;
-    if (Array.isArray(imported)) newCards = imported;
-    else if (imported && Array.isArray(imported.cards)) { newCards = imported.cards; newSettings = imported.settings; }
+    // Détection du schéma : v2 ({version, settings, cards}) | v1 (array) | objet unique | enveloppe variée
+    let rawCards = null, newSettings = null;
+    if (Array.isArray(imported)) rawCards = imported;
+    else if (imported && Array.isArray(imported.cards)) { rawCards = imported.cards; newSettings = imported.settings; }
+    else if (imported && Array.isArray(imported.deck)) { rawCards = imported.deck; newSettings = imported.settings; }
+    else if (imported && Array.isArray(imported.flashcards)) { rawCards = imported.flashcards; }
+    else if (imported && typeof imported === 'object' && (imported.question || imported.answer)) rawCards = [imported];
     else { toast("Schéma JSON non reconnu.", 'error'); return; }
 
-    if (!newCards.every(c => c && typeof c.question === 'string')) {
-        toast("Fichier contient des entrées invalides.", 'error'); return;
+    const normalized = rawCards.map(normalizeImportedCard).filter(Boolean);
+    if (normalized.length === 0) {
+        toast("Aucune carte exploitable dans le fichier.", 'error', 5000);
+        return;
     }
+    const skipped = rawCards.length - normalized.length;
 
     const ok = cards.length === 0
         ? true
-        : await confirmDialog("Remplacer le deck actuel ?", `Cela va écraser ${cards.length} carte(s) par ${newCards.length} importée(s).`, "Remplacer", true);
+        : await confirmDialog("Remplacer le deck actuel ?", `Cela va écraser ${cards.length} carte(s) par ${normalized.length} importée(s)${skipped ? ` (${skipped} ignorée(s))` : ''}.`, "Remplacer", true);
     if (!ok) return;
 
-    cards = newCards.map(c => ensureStyles({ ...c, id: sanitizeId(c.id) }));
-    if (newSettings) settings = { ...settings, ...newSettings };
+    cards = normalized;
+    if (newSettings && typeof newSettings === 'object') {
+        settings = { ...settings, ...newSettings };
+    }
     save();
     render();
-    toast(`Deck importé (${cards.length} cartes)`, 'success');
+    toast(`Deck importé · ${cards.length} cartes${skipped ? ` · ${skipped} ignorée(s)` : ''}`, 'success');
 }
 
 /* ============================================================
