@@ -582,6 +582,10 @@ function uid() {
     if (window.crypto?.randomUUID) return crypto.randomUUID();
     return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 }
+function isSafeId(s) {
+    return typeof s === 'string' && s.length > 0 && s.length < 128 && /^[A-Za-z0-9_-]+$/.test(s);
+}
+function sanitizeId(s) { return isSafeId(s) ? s : uid(); }
 function ensureStyles(card) {
     card.styleQ = { ...DEFAULTS.styleQ, ...(card.styleQ || {}) };
     card.styleA = { ...DEFAULTS.styleA, ...(card.styleA || {}) };
@@ -598,7 +602,7 @@ function loadState() {
         const raw = localStorage.getItem(STORAGE_KEY);
         cards = raw ? JSON.parse(raw) : [];
         if (!Array.isArray(cards)) cards = [];
-        cards.forEach(ensureStyles);
+        cards.forEach(c => { c.id = sanitizeId(c.id); ensureStyles(c); });
     } catch (e) { cards = []; }
     try {
         const s = localStorage.getItem(SETTINGS_KEY);
@@ -1374,9 +1378,17 @@ async function printDeck(mode = 'both') {
         const iframeImgs = doc.querySelectorAll('img');
         await Promise.all([...iframeImgs].map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
         document.body.removeChild(root);
+        let removed = false;
+        const cleanup = () => {
+            if (removed) return;
+            removed = true;
+            try { document.body.removeChild(iframe); } catch {}
+        };
+        iframe.contentWindow.addEventListener('afterprint', cleanup);
+        // Fallback long pour les navigateurs qui n'émettent pas afterprint (anciens Safari)
+        setTimeout(cleanup, 60000);
         iframe.contentWindow.focus();
         iframe.contentWindow.print();
-        setTimeout(() => { try { document.body.removeChild(iframe); } catch {} }, 1000);
         toast("Boîte d'impression ouverte", 'success');
     } catch (err) {
         console.error(err);
@@ -1419,7 +1431,7 @@ async function importJSON(e) {
         : await confirmDialog("Remplacer le deck actuel ?", `Cela va écraser ${cards.length} carte(s) par ${newCards.length} importée(s).`, "Remplacer", true);
     if (!ok) return;
 
-    cards = newCards.map(c => ensureStyles({ ...c, id: c.id || uid() }));
+    cards = newCards.map(c => ensureStyles({ ...c, id: sanitizeId(c.id) }));
     if (newSettings) settings = { ...settings, ...newSettings };
     save();
     render();
