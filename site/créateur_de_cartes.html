@@ -70,7 +70,9 @@
         .card-index {
             position: absolute; top: 10px; right: 14px;
             font-size: 9px; font-weight: 700; letter-spacing: .08em;
-            color: rgba(15,23,42,.25);
+            /* Hérite de la couleur du titre (--card-text) puis applique alpha via opacity */
+            color: var(--card-text, #0f172a);
+            opacity: .35;
             font-variant-numeric: tabular-nums;
             z-index: 2;
         }
@@ -114,12 +116,13 @@
             70%  { box-shadow: 0 0 0 14px rgba(79,70,229,0), 0 8px 24px -8px rgba(15,23,42,.08); }
             100% { box-shadow: 0 0 0 0 rgba(79,70,229,0), 0 8px 24px -8px rgba(15,23,42,.08); }
         }
+        /* fx-flash : overlay violet via box-shadow inset (préserve bgColor user/dark) */
         .card-container.fx-flash .card-fixed-size {
-            animation: cardFlash .65s ease-out;
+            animation: cardFlash .7s ease-out;
         }
         @keyframes cardFlash {
-            0%   { background-color: rgba(167,139,250,.18); }
-            100% { background-color: transparent; }
+            0%   { box-shadow: inset 0 0 0 9999px rgba(167,139,250,.22), 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -8px rgba(15,23,42,.08); }
+            100% { box-shadow: inset 0 0 0 9999px rgba(167,139,250,0),   0 1px 2px rgba(15,23,42,.04), 0 8px 24px -8px rgba(15,23,42,.08); }
         }
 
         .upside-down { transform: rotate(180deg); display: inline-block; }
@@ -135,7 +138,11 @@
         .card-fixed-size:hover .card-edit-hint { opacity: 1; transform: translateY(0); }
 
         @media (prefers-reduced-motion: reduce) {
-            .card-container, .card-fixed-size, .card-edit-hint { animation: none !important; transition: none !important; }
+            .card-container, .card-fixed-size, .card-edit-hint,
+            .card-container.fx-pulse .card-fixed-size,
+            .card-container.fx-flash .card-fixed-size {
+                animation: none !important; transition: none !important;
+            }
         }
 
         /* ---- DRAWER (sidebar + editor) ---- */
@@ -845,14 +852,19 @@ function moveCard(id, direction) {
 async function deleteCard(id) {
     const ok = await confirmDialog("Supprimer cette carte ?", "Cette action est définitive.", "Supprimer", true);
     if (!ok) return;
-    const removed = cards.find(c => c.id === id);
-    cards = cards.filter(c => c.id !== id);
+    const idx = cards.findIndex(c => c.id === id);
+    if (idx < 0) return;
+    const removed = cards[idx];
+    cards.splice(idx, 1);
     closeEditor();
     save();
     render();
     toast("Carte supprimée", '', 4000, {
         label: "Annuler",
-        handler: () => { cards.push(removed); save(); render(); toast("Carte restaurée", 'success', 1500); }
+        handler: () => {
+            cards.splice(Math.min(idx, cards.length), 0, removed);
+            save(); render(); toast("Carte restaurée", 'success', 1500);
+        }
     });
 }
 async function clearAll() {
@@ -927,12 +939,14 @@ function render() {
         if (idx < 12) cardEl.style.animationDelay = (idx * 40) + 'ms';
 
         const accent = card.styleA.color || '#4f46e5';
+        const textCol = card.styleTitle.color || card.styleQ.color || '#0f172a';
         const innerStyle = `
             border-radius: ${radius}px;
             border: ${borderSize}px solid ${borderCol};
             background-color: ${card.bgColor};
             --card-accent: ${accent};
             --card-border-color: ${borderCol};
+            --card-text: ${textCol};
         `;
 
         let optionsHtml = '';
@@ -947,7 +961,8 @@ function render() {
                     <span class="opt-text" style="text-align:${optAlign};">${escapeHtml(l)}</span>
                 </div>`).join('');
         } else {
-            optionsHtml = `<div style="text-align:${card.styleOptions.align || 'center'};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-style:italic;letter-spacing:.02em;">Vrai ou Faux ?</div>`;
+            // Vrai/Faux est un libellé d'instruction (pas une option) → always centered sauf si user explicit right
+            optionsHtml = `<div style="text-align:${card.styleOptions.align === 'right' ? 'right' : 'center'};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-style:italic;letter-spacing:.02em;">Vrai ou Faux ?</div>`;
         }
 
         const titleText = card.title?.trim() || settings.globalTitle;
@@ -1016,6 +1031,17 @@ function renderEditor() {
     const card = cards.find(c => c.id === activeId);
     if (!card) return;
 
+    // Snapshot focus (id + caret + scroll) pour le restaurer après le rebuild
+    const prevActive = document.activeElement;
+    const focusSnap = (prevActive && prevActive.id && $('editorContent').contains(prevActive))
+        ? {
+            id: prevActive.id,
+            start: prevActive.selectionStart,
+            end: prevActive.selectionEnd,
+            scroll: $('editorContent').scrollTop
+          }
+        : null;
+
     $('editorContent').innerHTML = `
         <div class="space-y-6">
             <div class="p-4 bg-gray-50 rounded-xl space-y-4">
@@ -1082,6 +1108,17 @@ function renderEditor() {
         </div>
     `;
     if (window.lucide) lucide.createIcons();
+    // Restaure focus + caret + scroll si on rebuild pendant la frappe
+    if (focusSnap) {
+        const el = document.getElementById(focusSnap.id);
+        if (el) {
+            el.focus({ preventScroll: true });
+            if (typeof el.setSelectionRange === 'function' && focusSnap.start != null) {
+                try { el.setSelectionRange(focusSnap.start, focusSnap.end); } catch {}
+            }
+            $('editorContent').scrollTop = focusSnap.scroll;
+        }
+    }
 }
 
 function textBlock(label, key, value, styleTarget, styleObj, multiline) {
@@ -1213,7 +1250,7 @@ function buildProbeHTML(card) {
     const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
     const optionsHtml = card.type === 'multiple'
         ? lines.map((l, i) => `<div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-decoration:${card.styleOptions.underline ? 'underline' : 'none'};text-align:${card.styleOptions.align || 'left'};line-height:1.3;margin:2px 0;"><b>${ALPHABET[i] || '•'})</b> ${escapeHtml(l)}</div>`).join('')
-        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${card.styleOptions.align || 'center'};color:${card.styleOptions.color};">Vrai ou Faux ?</div>`;
+        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${card.styleOptions.align === 'right' ? 'right' : 'center'};color:${card.styleOptions.color};">Vrai ou Faux ?</div>`;
     return `
         <div style="text-align:${card.styleTitle.align || 'center'};font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};line-height:1.2;">${escapeHtml(titleText)}</div>
         ${card.image ? `<div style="text-align:center;"><img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:${IMG_MAX_PX}px;object-fit:contain;"></div>` : ''}
@@ -1240,37 +1277,44 @@ function measureContentHeight(card) {
     return h;
 }
 
-// Baseline universel — recalibre depuis zéro pour vraiment équilibrer
-function applyScale(card, factor) {
+// Baseline universel — recalibre depuis zéro pour vraiment équilibrer.
+// imgSize : respecte la préférence user, ne rétrécit qu'en cas d'overflow (factor<1).
+function applyScale(card, factor, baseImgSize) {
     card.styleQ.size       = clamp(Math.round(18 * factor), 8, 38);
     card.styleOptions.size = clamp(Math.round(12 * factor), 8, 26);
     card.styleTitle.size   = clamp(Math.round(14 * factor), 8, 26);
     card.styleA.size       = clamp(Math.round(13 * factor), 8, 24);
     if (card.image) {
-        // image suit la racine du facteur (croît moins vite que le texte)
-        card.imgSize = clamp(Math.round(100 * Math.sqrt(factor)), 50, 150);
+        card.imgSize = factor < 1
+            ? clamp(Math.round(baseImgSize * Math.sqrt(factor)), 40, baseImgSize) // shrink
+            : baseImgSize;                                                         // jamais agrandir
     }
 }
 
 function rescaleCard(card) {
     ensureStyles(card);
-    let lo = 0.45, hi = 2.2;
-    let best = { factor: 1, dist: Infinity, h: 0 };
+    // Snapshot avant binary search : permet de revenir si tout overflow
+    const baseImgSize = card.imgSize || 100;
+    let lo = 0.30, hi = 2.2; // borne min plus basse pour les cartes très chargées
+    // best initialisé sur lo (pas 1) pour garantir au moins UN changement quand jamais ≤ TARGET
+    let best = { factor: lo, dist: Infinity, h: Infinity };
 
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 16; i++) {
         const mid = (lo + hi) / 2;
-        applyScale(card, mid);
+        applyScale(card, mid, baseImgSize);
         const h = measureContentHeight(card);
         if (h > CARD_TARGET_H) {
             hi = mid; // trop grand → réduire
+            // Si on n'a jamais trouvé de fit, on garde le facteur le plus bas tenté
+            if (best.h === Infinity && mid < best.factor) best = { factor: mid, dist: h - CARD_TARGET_H, h };
         } else {
             const dist = Math.abs(FILL_IDEAL - h);
-            if (dist < best.dist) best = { factor: mid, dist, h };
+            if (best.h === Infinity || dist < best.dist) best = { factor: mid, dist, h };
             if (h < FILL_MIN) lo = mid; // sous-rempli → agrandir
             else break;                  // dans la zone idéale → stop
         }
     }
-    applyScale(card, best.factor);
+    applyScale(card, best.factor, baseImgSize);
     return measureContentHeight(card) <= CARD_TARGET_H;
 }
 
@@ -1305,13 +1349,16 @@ function applyTheme(key) {
     });
     save();
     render();
+    if (activeId) renderEditor();
     fxApply('fx-pulse');
     toast(`Thème « ${t.name} » appliqué`, 'success', 4000, {
         label: 'Annuler',
         handler: () => {
             settings = snapshot.settings;
             cards = snapshot.cards;
-            save(); render(); toast("Thème restauré", 'success', 1500);
+            save(); render();
+            if (activeId) renderEditor();
+            toast("Thème restauré", 'success', 1500);
         }
     });
 }
@@ -1497,40 +1544,40 @@ async function exportCSV() {
     toast(`${deliveredMsg(r, 'CSV')} · ${cards.length} cartes`, 'success');
 }
 
-function buildCardHTML(card, { side = 'both', mirrored = false } = {}) {
+function buildCardHTML(card, { side = 'both' } = {}) {
     ensureStyles(card);
     const titleText = card.title?.trim() || settings.globalTitle;
     const accent = card.styleA.color || '#4f46e5';
+    const borderC = settings.borderColor || '#e5e7eb';
     const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
     const optAlign = card.styleOptions.align || 'left';
-    const optJustify = optAlign === 'center' ? 'center' : optAlign === 'right' ? 'flex-end' : 'flex-start';
-    // Badge inline (impression-safe, sans dépendre des classes CSS)
-    const badge = letter => `<span style="display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;padding:0 3px;border-radius:999px;font-size:8px;font-weight:700;background:${accent};color:white;margin-right:5px;vertical-align:1px;line-height:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${letter}</span>`;
+    // Badge inline-block (html2canvas: pas de inline-flex imbriqué)
+    const badge = letter => `<span style="display:inline-block;min-width:13px;padding:1px 4px;border-radius:8px;font-size:9px;font-weight:700;background:${accent};color:#ffffff;margin-right:5px;line-height:1.1;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${letter}</span>`;
+    // Options en blocs simples (pas de flex row) — wrap natif + alignement par text-align
     const optionsHtml = card.type === 'multiple'
-        ? lines.map((l, i) => `<div style="display:flex;justify-content:${optJustify};align-items:flex-start;font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};line-height:1.3;">${badge(ALPHABET[i] || '•')}<span style="text-align:${optAlign};">${escapeHtml(l)}</span></div>`).join('')
-        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${optAlign === 'left' ? 'center' : optAlign};color:${card.styleOptions.color};letter-spacing:.02em;">Vrai ou Faux ?</div>`;
+        ? lines.map((l, i) => `<div style="text-align:${optAlign};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};line-height:1.3;word-wrap:break-word;">${badge(ALPHABET[i] || '•')}${escapeHtml(l)}</div>`).join('')
+        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${optAlign === 'right' ? 'right' : 'center'};color:${card.styleOptions.color};letter-spacing:.02em;">Vrai ou Faux ?</div>`;
 
-    // Séparateur stylé (gradient + pastille). Compatible html2canvas.
-    const sep = `<div style="position:relative;height:1px;margin:6px 18px 4px;background:linear-gradient(90deg,transparent,${escapeAttr(settings.borderColor || '#e5e7eb')} 25%,${escapeAttr(settings.borderColor || '#e5e7eb')} 75%,transparent);-webkit-print-color-adjust:exact;print-color-adjust:exact;"><span style="position:absolute;left:50%;top:50%;width:5px;height:5px;border-radius:50%;background:${accent};transform:translate(-50%,-50%);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></span></div>`;
+    // Séparateur simple : border-top + pastille via background-image (html2canvas-safe)
+    const sep = `<div style="height:8px;margin:4px 18px 2px;border-top:1px solid ${borderC};position:relative;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>`;
 
     const front = `
-        <div style="text-align:${card.styleTitle.align || 'center'};margin-bottom:4px;font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};line-height:1.2;letter-spacing:.01em;">${escapeHtml(titleText)}</div>
-        <div style="flex:1;display:flex;flex-direction:column;gap:5px;overflow:hidden;">
-            ${card.image ? `<div style="text-align:center;"><img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:40%;object-fit:contain;"></div>` : ''}
-            <div style="text-align:${card.styleQ.align || 'center'};font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};line-height:1.25;">${escapeHtml(card.question)}</div>
-            <div style="display:flex;flex-direction:column;gap:2px;width:100%;padding:0 2px;">${optionsHtml}</div>
+        <div style="text-align:${card.styleTitle.align || 'center'};margin-bottom:4px;font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};line-height:1.2;letter-spacing:.01em;flex-shrink:0;">${escapeHtml(titleText)}</div>
+        <div style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;gap:5px;overflow:hidden;">
+            ${card.image ? `<div style="text-align:center;flex-shrink:0;"><img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:38%;object-fit:contain;"></div>` : ''}
+            <div style="text-align:${card.styleQ.align || 'center'};font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};line-height:1.25;flex-shrink:0;word-wrap:break-word;">${escapeHtml(card.question)}</div>
+            <div style="display:flex;flex-direction:column;gap:2px;width:100%;padding:0 2px;overflow:hidden;">${optionsHtml}</div>
         </div>`;
 
+    // Réponse : div pleine largeur, rotation 180° sur le div lui-même (pas inline-block)
     const answerInline = `
         ${sep}
-        <div style="text-align:${card.styleA.align || 'center'};">
-            <div style="transform:rotate(180deg);display:inline-block;font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};">${escapeHtml(card.answer)}</div>
-        </div>`;
+        <div style="flex-shrink:0;text-align:${card.styleA.align || 'center'};transform:rotate(180deg);font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};word-wrap:break-word;line-height:1.25;">${escapeHtml(card.answer)}</div>`;
 
     const answerFull = `
         <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;">
             <div style="font-size:10px;color:#9ca3af;letter-spacing:.1em;text-transform:uppercase;font-weight:700;">Réponse</div>
-            <div style="font-size:${Math.max(14, card.styleA.size + 4)}px;color:${card.styleA.color};font-weight:700;line-height:1.3;">${escapeHtml(card.answer)}</div>
+            <div style="font-size:${Math.max(14, card.styleA.size + 4)}px;color:${card.styleA.color};font-weight:700;line-height:1.3;word-wrap:break-word;">${escapeHtml(card.answer)}</div>
             <div style="font-size:10px;color:#9ca3af;margin-top:8px;">${escapeHtml(titleText)}</div>
         </div>`;
 
@@ -1621,22 +1668,37 @@ async function renderCardsToPrintLayout(mode = 'both') {
 async function exportPNG() {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
     busy(true, "Génération du PNG…");
+    let layout = null;
     try {
-        const { root, pages } = await renderCardsToPrintLayout('both');
-        let lastResult = 'downloaded';
+        layout = await renderCardsToPrintLayout('both');
+        const { pages } = layout;
+        // Multi-page sur mobile : 1 modal × N pages = enfer UX → suggérer PDF
+        if (pages.length > 1 && isLikelyMobile()) {
+            toast(`Deck de ${pages.length} pages : préférez l'export PDF (un seul fichier).`, '', 6000);
+        }
+        // Pré-générer tous les blobs avant toute interaction utilisateur
+        const blobs = [];
         for (let i = 0; i < pages.length; i++) {
             const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-            const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-            const suffix = pages.length > 1 ? `-p${i+1}` : '';
-            lastResult = await deliverBlob(blob, safeFilename('deck-educards') + suffix + '.png', 'image/png');
-            if (lastResult === 'cancelled') break;
+            blobs.push(await new Promise(res => canvas.toBlob(res, 'image/png')));
         }
-        document.body.removeChild(root);
-        toast(`${deliveredMsg(lastResult, 'PNG')} · ${pages.length} page${pages.length>1?'s':''}`, 'success');
+        busy(false); // libérer le spinner avant la modal mobile
+        // Single page : flux normal (modal mobile / download desktop)
+        if (blobs.length === 1) {
+            const r = await deliverBlob(blobs[0], safeFilename('deck-educards') + '.png', 'image/png');
+            toast(`${deliveredMsg(r, 'PNG')}`, 'success');
+        } else {
+            // Multi-page : download direct (pas de modal × N)
+            blobs.forEach((blob, i) => {
+                downloadBlob(blob, safeFilename('deck-educards') + `-p${i+1}.png`);
+            });
+            toast(`PNG téléchargé · ${blobs.length} pages`, 'success');
+        }
     } catch (err) {
         console.error(err);
         toast("Erreur lors de l'export PNG.", 'error', 5000);
     } finally {
+        if (layout) { try { document.body.removeChild(layout.root); } catch {} }
         busy(false);
     }
 }
@@ -1645,24 +1707,27 @@ async function exportPDF(mode = 'both') {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
     if (!window.jspdf) { toast("Bibliothèque PDF non chargée.", 'error'); return; }
     busy(true, "Génération du PDF…");
+    let layout = null;
     try {
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const { root, pages } = await renderCardsToPrintLayout(mode);
+        layout = await renderCardsToPrintLayout(mode);
+        const { pages } = layout;
         for (let i = 0; i < pages.length; i++) {
             const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
             const imgData = canvas.toDataURL('image/jpeg', 0.92);
             if (i > 0) pdf.addPage();
             pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
         }
-        document.body.removeChild(root);
         const blob = pdf.output('blob');
+        busy(false); // libérer le spinner avant la modal mobile
         const r = await deliverBlob(blob, safeFilename('deck-educards') + '.pdf', 'application/pdf');
         toast(`${deliveredMsg(r, 'PDF')} · ${pages.length} page${pages.length>1?'s':''}`, 'success');
     } catch (err) {
         console.error(err);
         toast("Erreur lors de l'export PDF.", 'error', 5000);
     } finally {
+        if (layout) { try { document.body.removeChild(layout.root); } catch {} }
         busy(false);
     }
 }
@@ -1727,6 +1792,23 @@ function openPrintOptions() {
 function closePrintOptions() { $('print-options-backdrop').classList.remove('open'); }
 
 /* ------------ Import ------------ */
+// Validation CSS : on n'accepte que les couleurs hex (#abc / #aabbcc / #aabbccdd)
+const SAFE_COLOR_RE = /^#[0-9a-f]{3,8}$/i;
+function safeColor(v, fallback) {
+    return (typeof v === 'string' && SAFE_COLOR_RE.test(v.trim())) ? v.trim() : fallback;
+}
+function safeStyle(raw, defaults) {
+    const r = raw && typeof raw === 'object' ? raw : {};
+    const align = ['left','center','right'].includes(r.align) ? r.align : defaults.align;
+    return {
+        size: Number.isFinite(+r.size) ? clamp(parseInt(r.size), 6, 60) : defaults.size,
+        color: safeColor(r.color, defaults.color),
+        weight: r.weight === 'bold' ? 'bold' : 'normal',
+        italic: !!r.italic,
+        underline: !!r.underline,
+        align
+    };
+}
 function normalizeImportedCard(raw) {
     if (!raw || typeof raw !== 'object') return null;
     // Accepte plusieurs noms de champs (anciens decks, variantes)
@@ -1747,21 +1829,44 @@ function normalizeImportedCard(raw) {
         type = options.trim() ? 'multiple' : 'boolean';
     }
 
+    // image : data: URL ou http(s) — pas de javascript: ni rien d'autre
+    let image = null;
+    if (typeof raw.image === 'string') {
+        const trimmed = raw.image.trim();
+        if (/^(data:image\/|https?:\/\/)/i.test(trimmed)) image = trimmed;
+    }
+
+    // imgSize : accepte number ou string numérique
+    const imgRaw = typeof raw.imgSize === 'string' ? Number(raw.imgSize) : raw.imgSize;
+    const imgSize = Number.isFinite(imgRaw) ? clamp(imgRaw, 30, 200) : DEFAULTS.imgSize;
+
     return {
         id: sanitizeId(raw.id),
         question: String(question),
         answer: String(answer),
         type,
         options,
-        image: typeof raw.image === 'string' ? raw.image : null,
-        bgColor: typeof raw.bgColor === 'string' ? raw.bgColor : DEFAULTS.bgColor,
+        image,
+        bgColor: safeColor(raw.bgColor, DEFAULTS.bgColor),
         title: typeof raw.title === 'string' ? raw.title : '',
-        imgSize: Number.isFinite(raw.imgSize) ? raw.imgSize : DEFAULTS.imgSize,
-        styleQ: { ...DEFAULTS.styleQ, ...(raw.styleQ || {}) },
-        styleA: { ...DEFAULTS.styleA, ...(raw.styleA || {}) },
-        styleTitle: { ...DEFAULTS.styleTitle, ...(raw.styleTitle || {}) },
-        styleOptions: { ...DEFAULTS.styleOptions, ...(raw.styleOptions || {}) }
+        imgSize,
+        styleQ: safeStyle(raw.styleQ, DEFAULTS.styleQ),
+        styleA: safeStyle(raw.styleA, DEFAULTS.styleA),
+        styleTitle: safeStyle(raw.styleTitle, DEFAULTS.styleTitle),
+        styleOptions: safeStyle(raw.styleOptions, DEFAULTS.styleOptions)
     };
+}
+function safeSettings(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const out = {};
+    if (typeof raw.globalTitle === 'string') out.globalTitle = raw.globalTitle.slice(0, 200);
+    if (raw.borderColor) {
+        const c = safeColor(raw.borderColor, null);
+        if (c) out.borderColor = c;
+    }
+    if (Number.isFinite(+raw.borderSize)) out.borderSize = clamp(parseInt(raw.borderSize), 0, 10);
+    if (Number.isFinite(+raw.radius)) out.radius = clamp(parseInt(raw.radius), 0, 80);
+    return out;
 }
 
 async function importJSON(e) {
@@ -1795,9 +1900,8 @@ async function importJSON(e) {
     if (!ok) return;
 
     cards = normalized;
-    if (newSettings && typeof newSettings === 'object') {
-        settings = { ...settings, ...newSettings };
-    }
+    const safeImported = safeSettings(newSettings);
+    if (safeImported) settings = { ...settings, ...safeImported };
     save();
     render();
     toast(`Deck importé · ${cards.length} cartes${skipped ? ` · ${skipped} ignorée(s)` : ''}`, 'success');
@@ -1903,6 +2007,8 @@ let studyHideAnswer = false;
 
 function openStudyMode() {
     if (cards.length === 0) { toast("Aucune carte à étudier.", 'error'); return; }
+    closeSidebar();
+    closeEditor();
     studyOrder = cards.map((_, i) => i);
     studyIdx = 0;
     studyFlipped = false;
