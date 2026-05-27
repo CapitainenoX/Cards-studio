@@ -25,8 +25,15 @@
         }
 
         * { -webkit-tap-highlight-color: transparent; }
-        html, body { -webkit-text-size-adjust: 100%; }
+        html, body { -webkit-text-size-adjust: 100%; height: 100%; }
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #ffffff; color: var(--color-text); }
+        /* App-shell : 100dvh sur browsers récents pour gérer la barre d'adresse iOS Safari
+           (100vh la laisse compter, donc la sidebar/topbar « remonte » au reload). */
+        #app-shell { height: 100vh; height: 100dvh; }
+        /* Safe-area sur iPhone notch */
+        @supports (padding: env(safe-area-inset-top)) {
+            .mobile-topbar { padding-top: max(12px, env(safe-area-inset-top)); }
+        }
         button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
             outline: 2px solid var(--color-primary);
             outline-offset: 2px;
@@ -296,7 +303,7 @@
 <div id="app-shell" class="h-screen flex flex-col lg:flex-row overflow-hidden">
 
     <!-- ============ MOBILE TOPBAR ============ -->
-    <header class="no-print lg:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white sticky top-0 z-30">
+    <header class="mobile-topbar no-print lg:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white sticky top-0 z-30 shrink-0">
         <button id="open-sidebar" aria-label="Ouvrir le menu" class="p-2 rounded-lg hover:bg-gray-100">
             <i data-lucide="menu" class="w-5 h-5"></i>
         </button>
@@ -1236,11 +1243,14 @@ function uploadImg(e) {
    Algorithme binary-search : trouve un facteur d'échelle qui
    remplit 85-95% de la carte (équilibré, ni overflow ni vide).
    ============================================================ */
-const CARD_TARGET_H = 450;
-const CARD_TARGET_W = 320;
-const FILL_MIN = 380;   // ~85% rempli
-const FILL_IDEAL = 410; // ~91% — la cible
-const IMG_MAX_PX = 180; // image max ~40% de la hauteur
+// Probe en dimensions PRINT (60×85mm) — pas preview — sinon texte qui fit la preview
+// déborde quand exporté en PDF/PNG (largeur réduite = plus de word-wrap = plus de hauteur).
+// Marge supplémentaire (5%) pour absorber les différences de métriques entre browsers et html2canvas.
+const CARD_TARGET_W = 226; // 60mm @ 96dpi
+const CARD_TARGET_H = 305; // 85mm @ 96dpi minus 5% safety margin (vs 321 brut)
+const FILL_MIN = 240;   // ~79% rempli
+const FILL_IDEAL = 275; // ~90% — la cible
+const IMG_MAX_PX = 122; // image max ~40% de la hauteur print
 
 function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
 
@@ -1262,10 +1272,11 @@ function buildProbeHTML(card) {
 
 function measureContentHeight(card) {
     const probe = document.createElement('div');
+    // Padding 3mm × 2 ≈ 11.3px chaque côté, identique au print (renderCardsToPrintLayout)
     probe.style.cssText = `
         position:absolute;left:-99999px;top:0;
         width:${CARD_TARGET_W}px;
-        padding:20px;display:flex;flex-direction:column;gap:8px;
+        padding:12px;display:flex;flex-direction:column;gap:5px;
         background:white;box-sizing:border-box;
         font-family:'Plus Jakarta Sans',sans-serif;
     `;
@@ -1562,11 +1573,11 @@ function buildCardHTML(card, { side = 'both' } = {}) {
     const sep = `<div style="height:8px;margin:4px 18px 2px;border-top:1px solid ${borderC};position:relative;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>`;
 
     const front = `
-        <div style="text-align:${card.styleTitle.align || 'center'};margin-bottom:4px;font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};line-height:1.2;letter-spacing:.01em;flex-shrink:0;">${escapeHtml(titleText)}</div>
-        <div style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;gap:5px;overflow:hidden;">
-            ${card.image ? `<div style="text-align:center;flex-shrink:0;"><img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:38%;object-fit:contain;"></div>` : ''}
-            <div style="text-align:${card.styleQ.align || 'center'};font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};line-height:1.25;flex-shrink:0;word-wrap:break-word;">${escapeHtml(card.question)}</div>
-            <div style="display:flex;flex-direction:column;gap:2px;width:100%;padding:0 2px;overflow:hidden;">${optionsHtml}</div>
+        <div style="text-align:${card.styleTitle.align || 'center'};margin-bottom:3px;font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};line-height:1.2;letter-spacing:.01em;flex-shrink:0;">${escapeHtml(titleText)}</div>
+        <div style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;gap:4px;overflow:hidden;">
+            ${card.image ? `<div style="text-align:center;flex-shrink:0;"><img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:35%;object-fit:contain;"></div>` : ''}
+            <div style="text-align:${card.styleQ.align || 'center'};font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};line-height:1.25;flex-shrink:0;word-wrap:break-word;overflow-wrap:break-word;">${escapeHtml(card.question)}</div>
+            <div style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:2px;width:100%;padding:0 2px;overflow:hidden;">${optionsHtml}</div>
         </div>`;
 
     // Réponse : div pleine largeur, rotation 180° sur le div lui-même (pas inline-block)
