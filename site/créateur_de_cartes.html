@@ -90,7 +90,7 @@
             min-width: 18px; height: 18px; padding: 0 5px;
             border-radius: 999px; font-size: 10px; font-weight: 700;
             background: var(--card-accent, #4f46e5); color: white;
-            margin-right: 8px; vertical-align: 1px; line-height: 1;
+            margin-right: 8px; vertical-align: middle; line-height: 1;
             box-shadow: 0 1px 0 rgba(0,0,0,.05);
             flex-shrink: 0;
         }
@@ -419,11 +419,11 @@
                     <button onclick="exportPDF()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5">
                         <i data-lucide="file-text" class="w-3.5 h-3.5"></i> PDF
                     </button>
-                    <button onclick="document.getElementById('importFile').click()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5 col-span-2">
-                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> Importer un deck (.json)
+                    <button onclick="document.getElementById('importFile').click()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5 col-span-2" title="Sélectionnez 1 ou plusieurs .json — option fusionner disponible">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> Importer / Fusionner
                     </button>
                 </div>
-                <input type="file" id="importFile" class="hidden" accept=".json,application/json" onchange="importJSON(event)">
+                <input type="file" id="importFile" class="hidden" accept=".json,application/json,text/plain,.txt" multiple onchange="importJSON(event)">
             </div>
 
             <!-- TUTORIEL + DANGER -->
@@ -774,6 +774,45 @@ function confirmDialog(title, body, confirmLabel = 'Confirmer', danger = true) {
         backdrop.classList.add('open');
         document.addEventListener('keydown', onKey);
         setTimeout(() => btn.focus(), 50);
+    });
+}
+
+// Modal à N choix (boutons custom). Renvoie la valeur du bouton cliqué ou null si annulé.
+function choiceDialog(title, body, choices) {
+    return new Promise(resolve => {
+        const modal = document.createElement('div');
+        modal.className = 'modal-backdrop open';
+        modal.style.zIndex = '200';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <h3 class="text-base font-bold mb-2">${escapeHtml(title)}</h3>
+                <p class="text-sm text-gray-600 mb-4">${escapeHtml(body)}</p>
+                <div class="flex flex-col gap-2"></div>
+            </div>`;
+        const btnWrap = modal.querySelector('.flex.flex-col');
+        choices.forEach(c => {
+            const b = document.createElement('button');
+            b.dataset.val = c.value;
+            const variant = c.variant || 'neutral';
+            const cls = {
+                primary: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+                danger:  'bg-red-600 hover:bg-red-700 text-white',
+                neutral: 'border border-gray-200 hover:bg-gray-50 text-gray-900'
+            }[variant];
+            b.className = `w-full py-3 px-4 rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 ${cls}`;
+            b.innerHTML = (c.icon ? `<i data-lucide="${c.icon}" class="w-4 h-4"></i>` : '') + escapeHtml(c.label);
+            btnWrap.appendChild(b);
+        });
+        document.body.appendChild(modal);
+        if (window.lucide) lucide.createIcons();
+        const cleanup = (v) => { try { document.body.removeChild(modal); } catch {} document.removeEventListener('keydown', onKey); resolve(v); };
+        const onKey = e => { if (e.key === 'Escape') cleanup(null); };
+        modal.addEventListener('click', e => {
+            if (e.target === modal) return cleanup(null);
+            const btn = e.target.closest('[data-val]');
+            if (btn) cleanup(btn.dataset.val);
+        });
+        document.addEventListener('keydown', onKey);
     });
 }
 
@@ -1245,11 +1284,11 @@ function uploadImg(e) {
    ============================================================ */
 // Probe en dimensions PRINT (60×85mm) — pas preview — sinon texte qui fit la preview
 // déborde quand exporté en PDF/PNG (largeur réduite = plus de word-wrap = plus de hauteur).
-// Marge supplémentaire (5%) pour absorber les différences de métriques entre browsers et html2canvas.
+// Cible un remplissage modéré (~50-65%) pour laisser de la respiration aux cartes courtes.
 const CARD_TARGET_W = 226; // 60mm @ 96dpi
-const CARD_TARGET_H = 305; // 85mm @ 96dpi minus 5% safety margin (vs 321 brut)
-const FILL_MIN = 240;   // ~79% rempli
-const FILL_IDEAL = 275; // ~90% — la cible
+const CARD_TARGET_H = 305; // 85mm @ 96dpi minus 5% safety margin
+const FILL_MIN = 150;   // ~49% rempli (seuil sous lequel on grossit)
+const FILL_IDEAL = 200; // ~66% — la cible visuelle
 const IMG_MAX_PX = 122; // image max ~40% de la hauteur print
 
 function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
@@ -1306,7 +1345,8 @@ function rescaleCard(card) {
     ensureStyles(card);
     // Snapshot avant binary search : permet de revenir si tout overflow
     const baseImgSize = card.imgSize || 100;
-    let lo = 0.30, hi = 2.2; // borne min plus basse pour les cartes très chargées
+    // hi modéré (1.55) : empêche les cartes courtes d'exploser en taille géante.
+    let lo = 0.30, hi = 1.55;
     // best initialisé sur lo (pas 1) pour garantir au moins UN changement quand jamais ≤ TARGET
     let best = { factor: lo, dist: Infinity, h: Infinity };
 
@@ -1563,7 +1603,10 @@ function buildCardHTML(card, { side = 'both' } = {}) {
     const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
     const optAlign = card.styleOptions.align || 'left';
     // Badge inline-block (html2canvas: pas de inline-flex imbriqué)
-    const badge = letter => `<span style="display:inline-block;min-width:13px;padding:1px 4px;border-radius:8px;font-size:9px;font-weight:700;background:${accent};color:#ffffff;margin-right:5px;line-height:1.1;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${letter}</span>`;
+    // Badge : height === line-height + vertical-align:middle → la lettre est
+    // centrée verticalement dans le rond même quand html2canvas rastérise.
+    // box-sizing:content-box pour que padding ne décale pas la hauteur.
+    const badge = letter => `<span style="display:inline-block;box-sizing:content-box;min-width:12px;height:14px;line-height:14px;padding:0 4px;border-radius:9px;font-size:9px;font-weight:700;background:${accent};color:#ffffff;margin-right:5px;text-align:center;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${letter}</span>`;
     // Options en blocs simples (pas de flex row) — wrap natif + alignement par text-align
     const optionsHtml = card.type === 'multiple'
         ? lines.map((l, i) => `<div style="text-align:${optAlign};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};line-height:1.3;word-wrap:break-word;">${badge(ALPHABET[i] || '•')}${escapeHtml(l)}</div>`).join('')
@@ -1880,42 +1923,93 @@ function safeSettings(raw) {
     return out;
 }
 
+// Extrait { rawCards, newSettings } d'un JSON parsé, en supportant tous les schémas connus.
+function extractDeckPayload(imported) {
+    if (Array.isArray(imported)) return { rawCards: imported, newSettings: null };
+    if (!imported || typeof imported !== 'object') return null;
+    if (Array.isArray(imported.cards)) return { rawCards: imported.cards, newSettings: imported.settings };
+    if (Array.isArray(imported.deck))  return { rawCards: imported.deck,  newSettings: imported.settings };
+    if (Array.isArray(imported.flashcards)) return { rawCards: imported.flashcards, newSettings: null };
+    if (imported.question || imported.answer) return { rawCards: [imported], newSettings: null };
+    return null;
+}
+
 async function importJSON(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
     e.target.value = '';
-    let text;
-    try { text = await file.text(); } catch { toast("Lecture du fichier impossible.", 'error'); return; }
-    let imported;
-    try { imported = JSON.parse(text); } catch { toast("Fichier JSON invalide.", 'error'); return; }
 
-    // Détection du schéma : v2 ({version, settings, cards}) | v1 (array) | objet unique | enveloppe variée
-    let rawCards = null, newSettings = null;
-    if (Array.isArray(imported)) rawCards = imported;
-    else if (imported && Array.isArray(imported.cards)) { rawCards = imported.cards; newSettings = imported.settings; }
-    else if (imported && Array.isArray(imported.deck)) { rawCards = imported.deck; newSettings = imported.settings; }
-    else if (imported && Array.isArray(imported.flashcards)) { rawCards = imported.flashcards; }
-    else if (imported && typeof imported === 'object' && (imported.question || imported.answer)) rawCards = [imported];
-    else { toast("Schéma JSON non reconnu.", 'error'); return; }
+    // Parse tous les fichiers, accumule les cartes (multi-sélection = fusion auto)
+    let allCards = [];
+    let firstSettings = null;
+    let totalSkipped = 0;
+    let errored = [];
 
-    const normalized = rawCards.map(normalizeImportedCard).filter(Boolean);
-    if (normalized.length === 0) {
-        toast("Aucune carte exploitable dans le fichier.", 'error', 5000);
+    for (const file of files) {
+        let text, imported;
+        try { text = await file.text(); }
+        catch { errored.push(`${file.name} (lecture)`); continue; }
+        try { imported = JSON.parse(text); }
+        catch { errored.push(`${file.name} (JSON invalide)`); continue; }
+        const payload = extractDeckPayload(imported);
+        if (!payload) { errored.push(`${file.name} (schéma)`); continue; }
+        const norm = payload.rawCards.map(normalizeImportedCard).filter(Boolean);
+        totalSkipped += payload.rawCards.length - norm.length;
+        if (firstSettings == null && payload.newSettings) firstSettings = payload.newSettings;
+        allCards = allCards.concat(norm);
+    }
+
+    if (errored.length) toast(`Fichier(s) ignoré(s) : ${errored.join(', ')}`, 'error', 6000);
+    if (allCards.length === 0) {
+        toast("Aucune carte exploitable.", 'error', 5000);
         return;
     }
-    const skipped = rawCards.length - normalized.length;
 
-    const ok = cards.length === 0
-        ? true
-        : await confirmDialog("Remplacer le deck actuel ?", `Cela va écraser ${cards.length} carte(s) par ${normalized.length} importée(s)${skipped ? ` (${skipped} ignorée(s))` : ''}.`, "Remplacer", true);
-    if (!ok) return;
+    // Compatibilité : on garde les noms locaux utilisés plus bas
+    const normalized = allCards;
+    const newSettings = firstSettings;
+    const skipped = totalSkipped;
+    const multi = files.length > 1;
 
-    cards = normalized;
-    const safeImported = safeSettings(newSettings);
-    if (safeImported) settings = { ...settings, ...safeImported };
+    let mode = 'replace';
+    if (cards.length > 0) {
+        const source = multi ? `${files.length} fichiers` : 'le fichier';
+        const choice = await choiceDialog(
+            "Importer le deck",
+            `Vous avez déjà ${cards.length} carte(s). ${source} contient ${normalized.length} carte(s)${skipped ? ` (${skipped} ignorée(s))` : ''}.`,
+            [
+                { value: 'merge',   label: `Fusionner (+${normalized.length})`, icon: 'git-merge', variant: 'primary' },
+                { value: 'replace', label: `Remplacer (efface les ${cards.length} actuelles)`, icon: 'replace', variant: 'danger' },
+                { value: 'cancel',  label: 'Annuler', variant: 'neutral' }
+            ]
+        );
+        if (!choice || choice === 'cancel') return;
+        mode = choice;
+    }
+
+    if (mode === 'merge') {
+        // Regénère TOUS les ids importés pour garantir l'unicité (entre fichiers et avec l'existant)
+        const fresh = normalized.map(c => ({ ...c, id: uid() }));
+        cards = cards.concat(fresh);
+        toast(`Deck fusionné · +${fresh.length} cartes · total ${cards.length}${multi ? ` · ${files.length} fichiers` : ''}`, 'success');
+    } else {
+        // Multi-file replace : dédup interne aussi (deux fichiers peuvent avoir même id)
+        const seen = new Set();
+        cards = normalized.map(c => {
+            if (seen.has(c.id)) c = { ...c, id: uid() };
+            seen.add(c.id);
+            return c;
+        });
+        toast(`Deck importé · ${cards.length} cartes${multi ? ` (${files.length} fichiers)` : ''}${skipped ? ` · ${skipped} ignorée(s)` : ''}`, 'success');
+    }
+
+    // Settings : seulement appliqués en mode replace (fusionner ne touche pas le design global)
+    if (mode === 'replace') {
+        const safeImported = safeSettings(newSettings);
+        if (safeImported) settings = { ...settings, ...safeImported };
+    }
     save();
     render();
-    toast(`Deck importé · ${cards.length} cartes${skipped ? ` · ${skipped} ignorée(s)` : ''}`, 'success');
 }
 
 /* ============================================================
