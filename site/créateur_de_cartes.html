@@ -1325,8 +1325,10 @@ function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
 
 // Badge lettre QCM — markup unique partagé entre le probe (auto-rescale) et l'export,
 // pour que la hauteur mesurée corresponde exactement à la carte exportée (PNG/PDF/print).
+// Cercle parfait (width === height + border-radius:50%) et lettre centrée via line-height
+// (html2canvas ne gère pas le centrage flex de façon fiable).
 function optBadgeHTML(letter, accent) {
-    return `<span style="display:inline-block;box-sizing:content-box;min-width:12px;height:14px;line-height:14px;padding:0 4px;border-radius:9px;font-size:9px;font-weight:700;background:${accent};color:#ffffff;margin-right:5px;text-align:center;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${letter}</span>`;
+    return `<span style="display:inline-block;box-sizing:border-box;width:16px;height:16px;line-height:16px;padding:0;border-radius:50%;font-size:10px;font-weight:700;background:${accent};color:#ffffff;margin-right:6px;text-align:center;vertical-align:middle;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${letter}</span>`;
 }
 
 function buildProbeHTML(card) {
@@ -2108,6 +2110,8 @@ function endTutorial() {
     document.body.style.overflow = '';
     localStorage.setItem(TUTO_KEY, '1');
     document.removeEventListener('keydown', tutoKeyHandler);
+    // Ferme l'éditeur s'il a été ouvert par l'étape « panneau ».
+    if (!$('editor').classList.contains('translate-x-full')) closeEditor();
     // Retire la carte de démo éphémère si elle n'a pas été remplacée par du contenu réel.
     if (tutoTempCardId) {
         cards = cards.filter(c => c.id !== tutoTempCardId);
@@ -2131,9 +2135,25 @@ function renderTutorialStep() {
     $('tutoPrev').style.opacity = tutoIndex === 0 ? '.5' : '1';
     $('tutoNext').textContent = tutoIndex === tutorialSteps.length - 1 ? "Terminer" : "Suivant";
 
-    const spotEl = $('tutorial-spotlight-el');
-    const mask = $('tutorial-mask');
-    let targetEl = step.target ? step.target() : null;
+    const targetEl = step.target ? step.target() : null;
+    const isEditorStep = targetEl && targetEl === $('editor');
+
+    // Étape « panneau » : on ouvre réellement l'éditeur sur la 1ère carte pour qu'il
+    // soit visible et highlightable (sinon il est hors-écran → tutoriel qui se bloque).
+    if (isEditorStep) {
+        if ($('editor').classList.contains('translate-x-full') && cards[0]) {
+            openEditor(cards[0].id);
+            setTimeout(() => positionTuto($('editor')), 360); // laisse la transition d'ouverture finir
+            return;
+        }
+        positionTuto($('editor'));
+        return;
+    }
+
+    // Toute autre étape : referme l'éditeur s'il a été ouvert par une étape précédente.
+    if (!$('editor').classList.contains('translate-x-full')) closeEditor();
+
+    // Cible dans la sidebar sur mobile : on ouvre le tiroir d'abord.
     if (window.innerWidth < 1024 && targetEl && targetEl.closest('#sidebar')) {
         openSidebar();
         setTimeout(() => positionTuto(step.target ? step.target() : null), 350);
@@ -2144,7 +2164,12 @@ function renderTutorialStep() {
 function positionTuto(targetEl) {
     const spotEl = $('tutorial-spotlight-el');
     const bubble = $('tutorial-bubble');
-    if (!targetEl) {
+    const r = targetEl ? targetEl.getBoundingClientRect() : null;
+    // Cible absente, masquée ou hors de l'écran → bulle recentrée (jamais de blocage).
+    const onScreen = r && r.width > 0 && r.height > 0 &&
+        r.right > 0 && r.bottom > 0 &&
+        r.left < window.innerWidth && r.top < window.innerHeight;
+    if (!onScreen) {
         spotEl.style.display = 'none';
         bubble.style.top = '50%';
         bubble.style.left = '50%';
@@ -2152,7 +2177,6 @@ function positionTuto(targetEl) {
         return;
     }
     bubble.style.transform = '';
-    const r = targetEl.getBoundingClientRect();
     spotEl.style.display = 'block';
     spotEl.style.top = (r.top - 6) + 'px';
     spotEl.style.left = (r.left - 6) + 'px';
