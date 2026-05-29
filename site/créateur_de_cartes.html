@@ -1325,20 +1325,22 @@ function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
 
 // Badge lettre QCM — markup unique partagé entre le probe (auto-rescale) et l'export,
 // pour que la hauteur mesurée corresponde exactement à la carte exportée (PNG/PDF/print).
-// Cercle parfait (width === height + border-radius:50%) et lettre centrée via line-height
-// (html2canvas ne gère pas le centrage flex de façon fiable).
+// Cercle parfait + lettre centrée via flex (align/justify center) ; vertical-align:middle
+// sert de repli quand le badge est utilisé hors d'une ligne flex.
 function optBadgeHTML(letter, accent) {
-    return `<span style="display:inline-block;box-sizing:border-box;width:16px;height:16px;line-height:16px;padding:0;border-radius:50%;font-size:10px;font-weight:700;background:${accent};color:#ffffff;margin-right:6px;text-align:center;vertical-align:middle;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${letter}</span>`;
+    return `<span style="display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;width:16px;height:16px;border-radius:50%;font-size:10px;font-weight:700;background:${accent};color:#ffffff;margin-right:6px;vertical-align:middle;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${letter}</span>`;
 }
 
 function buildProbeHTML(card) {
     ensureStyles(card);
     const titleText = card.title?.trim() || settings.globalTitle;
     const accent = card.styleA.color || '#4f46e5';
+    const probeAlign = card.styleOptions.align || 'left';
+    const probeJustify = probeAlign === 'center' ? 'center' : probeAlign === 'right' ? 'flex-end' : 'flex-start';
     const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
-    // Markup identique à buildCardHTML (badge inline-block + word-wrap) → mesure fidèle.
+    // Mise en page identique à buildCardHTML (ligne flex) → mesure fidèle.
     const optionsHtml = card.type === 'multiple'
-        ? lines.map((l, i) => `<div style="text-align:${card.styleOptions.align || 'left'};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-decoration:${card.styleOptions.underline ? 'underline' : 'none'};line-height:1.3;word-wrap:break-word;">${optBadgeHTML(ALPHABET[i] || '•', accent)}<span style="vertical-align:middle;">${escapeHtml(l)}</span></div>`).join('')
+        ? lines.map((l, i) => `<div style="display:flex;align-items:center;justify-content:${probeJustify};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-decoration:${card.styleOptions.underline ? 'underline' : 'none'};line-height:1.3;">${optBadgeHTML(ALPHABET[i] || '•', accent)}<span style="min-width:0;word-break:break-word;text-align:${probeAlign};">${escapeHtml(l)}</span></div>`).join('')
         : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${card.styleOptions.align === 'right' ? 'right' : 'center'};color:${card.styleOptions.color};">Vrai ou Faux ?</div>`;
     return `
         <div style="text-align:${card.styleTitle.align || 'center'};font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};line-height:1.2;">${escapeHtml(titleText)}</div>
@@ -1643,12 +1645,11 @@ function buildCardHTML(card, { side = 'both' } = {}) {
     const borderC = settings.borderColor || '#e5e7eb';
     const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
     const optAlign = card.styleOptions.align || 'left';
-    // Badge inline-block partagé avec le probe auto-rescale (optBadgeHTML) :
-    // height === line-height + vertical-align:middle → lettre centrée même rastérisée.
+    const optJustify = optAlign === 'center' ? 'center' : optAlign === 'right' ? 'flex-end' : 'flex-start';
     const badge = letter => optBadgeHTML(letter, accent);
-    // Options en blocs simples (pas de flex row) — wrap natif + alignement par text-align
+    // Ligne flex : align-items:center → le rond est exactement au niveau du texte.
     const optionsHtml = card.type === 'multiple'
-        ? lines.map((l, i) => `<div style="text-align:${optAlign};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};line-height:1.3;word-wrap:break-word;">${badge(ALPHABET[i] || '•')}<span style="vertical-align:middle;">${escapeHtml(l)}</span></div>`).join('')
+        ? lines.map((l, i) => `<div style="display:flex;align-items:center;justify-content:${optJustify};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};line-height:1.3;">${badge(ALPHABET[i] || '•')}<span style="min-width:0;word-break:break-word;text-align:${optAlign};">${escapeHtml(l)}</span></div>`).join('')
         : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${optAlign === 'right' ? 'right' : 'center'};color:${card.styleOptions.color};letter-spacing:.02em;">Vrai ou Faux ?</div>`;
 
     // Séparateur simple : border-top + pastille via background-image (html2canvas-safe)
