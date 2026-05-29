@@ -1338,7 +1338,7 @@ function buildProbeHTML(card) {
     const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
     // Markup identique à buildCardHTML (badge inline-block + word-wrap) → mesure fidèle.
     const optionsHtml = card.type === 'multiple'
-        ? lines.map((l, i) => `<div style="text-align:${card.styleOptions.align || 'left'};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-decoration:${card.styleOptions.underline ? 'underline' : 'none'};line-height:1.3;word-wrap:break-word;">${optBadgeHTML(ALPHABET[i] || '•', accent)}${escapeHtml(l)}</div>`).join('')
+        ? lines.map((l, i) => `<div style="text-align:${card.styleOptions.align || 'left'};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-decoration:${card.styleOptions.underline ? 'underline' : 'none'};line-height:1.3;word-wrap:break-word;">${optBadgeHTML(ALPHABET[i] || '•', accent)}<span style="vertical-align:middle;">${escapeHtml(l)}</span></div>`).join('')
         : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${card.styleOptions.align === 'right' ? 'right' : 'center'};color:${card.styleOptions.color};">Vrai ou Faux ?</div>`;
     return `
         <div style="text-align:${card.styleTitle.align || 'center'};font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};line-height:1.2;">${escapeHtml(titleText)}</div>
@@ -1648,7 +1648,7 @@ function buildCardHTML(card, { side = 'both' } = {}) {
     const badge = letter => optBadgeHTML(letter, accent);
     // Options en blocs simples (pas de flex row) — wrap natif + alignement par text-align
     const optionsHtml = card.type === 'multiple'
-        ? lines.map((l, i) => `<div style="text-align:${optAlign};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};line-height:1.3;word-wrap:break-word;">${badge(ALPHABET[i] || '•')}${escapeHtml(l)}</div>`).join('')
+        ? lines.map((l, i) => `<div style="text-align:${optAlign};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};line-height:1.3;word-wrap:break-word;">${badge(ALPHABET[i] || '•')}<span style="vertical-align:middle;">${escapeHtml(l)}</span></div>`).join('')
         : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${optAlign === 'right' ? 'right' : 'center'};color:${card.styleOptions.color};letter-spacing:.02em;">Vrai ou Faux ?</div>`;
 
     // Séparateur simple : border-top + pastille via background-image (html2canvas-safe)
