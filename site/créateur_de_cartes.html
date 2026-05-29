@@ -25,8 +25,15 @@
         }
 
         * { -webkit-tap-highlight-color: transparent; }
-        html, body { -webkit-text-size-adjust: 100%; }
+        html, body { -webkit-text-size-adjust: 100%; height: 100%; }
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #ffffff; color: var(--color-text); }
+        /* App-shell : 100dvh sur browsers récents pour gérer la barre d'adresse iOS Safari
+           (100vh la laisse compter, donc la sidebar/topbar « remonte » au reload). */
+        #app-shell { height: 100vh; height: 100dvh; }
+        /* Safe-area sur iPhone notch */
+        @supports (padding: env(safe-area-inset-top)) {
+            .mobile-topbar { padding-top: max(12px, env(safe-area-inset-top)); }
+        }
         button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
             outline: 2px solid var(--color-primary);
             outline-offset: 2px;
@@ -42,21 +49,108 @@
             flex-direction: column;
             background: white;
             position: relative;
-            padding: 20px;
-            transition: box-shadow .2s ease, transform .2s ease;
+            padding: 22px;
             overflow: hidden;
+            isolation: isolate;
+            transition: transform .35s cubic-bezier(.16,1,.3,1),
+                        box-shadow .35s cubic-bezier(.16,1,.3,1);
+            box-shadow:
+                0 1px 2px rgba(15,23,42,.04),
+                0 8px 24px -8px rgba(15,23,42,.08);
         }
-        .card-fixed-size:hover { transform: translateY(-2px); }
-        .card-container { transition: transform .25s ease; }
-        .upside-down { transform: rotate(180deg); }
+        /* Reflet diagonal subtil */
+        .card-fixed-size::before {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,.6) 0%, transparent 35%, transparent 65%, rgba(0,0,0,.02) 100%);
+            pointer-events: none; z-index: 0;
+        }
+        .card-fixed-size > * { position: relative; z-index: 1; }
+        .card-fixed-size:hover {
+            transform: translateY(-6px) scale(1.015);
+            box-shadow:
+                0 2px 4px rgba(15,23,42,.06),
+                0 24px 48px -16px rgba(79,70,229,.22);
+        }
+        .card-fixed-size:active { transform: translateY(-2px) scale(1.0); transition-duration: .12s; }
+
+        /* Numéro de carte (subtil, en haut à droite) */
+        .card-index {
+            position: absolute; top: 10px; right: 14px;
+            font-size: 9px; font-weight: 700; letter-spacing: .08em;
+            /* Hérite de la couleur du titre (--card-text) puis applique alpha via opacity */
+            color: var(--card-text, #0f172a);
+            opacity: .35;
+            font-variant-numeric: tabular-nums;
+            z-index: 2;
+        }
+
+        /* Badge lettre (A B C…) pour QCM options */
+        .opt-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-width: 18px; height: 18px; padding: 0 5px;
+            border-radius: 999px; font-size: 10px; font-weight: 700;
+            background: var(--card-accent, #4f46e5); color: white;
+            margin-right: 8px; vertical-align: middle; line-height: 1;
+            box-shadow: 0 1px 0 rgba(0,0,0,.05);
+            flex-shrink: 0;
+        }
+        .opt-line { display: flex; align-items: flex-start; gap: 0; }
+        .opt-line .opt-text { flex: 1; }
+
+        /* Séparateur réponse stylé (gradient + pastille) */
+        .answer-sep {
+            height: 1px; margin: 10px 32px 8px; position: relative;
+            background: linear-gradient(90deg, transparent, var(--card-border-color, #e5e7eb) 25%, var(--card-border-color, #e5e7eb) 75%, transparent);
+        }
+        .answer-sep::after {
+            content: ''; position: absolute; left: 50%; top: 50%;
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--card-accent, #4f46e5);
+            transform: translate(-50%, -50%);
+        }
+
+        .card-container { animation: cardIn .5s cubic-bezier(.16,1,.3,1) backwards; }
+        @keyframes cardIn {
+            from { opacity: 0; transform: translateY(24px) scale(.94); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        /* Pulse au theme apply / rescale */
+        .card-container.fx-pulse .card-fixed-size {
+            animation: cardPulse 1s cubic-bezier(.16,1,.3,1);
+        }
+        @keyframes cardPulse {
+            0%   { box-shadow: 0 0 0 0 rgba(79,70,229,.45), 0 8px 24px -8px rgba(15,23,42,.08); }
+            70%  { box-shadow: 0 0 0 14px rgba(79,70,229,0), 0 8px 24px -8px rgba(15,23,42,.08); }
+            100% { box-shadow: 0 0 0 0 rgba(79,70,229,0), 0 8px 24px -8px rgba(15,23,42,.08); }
+        }
+        /* fx-flash : overlay violet via box-shadow inset (préserve bgColor user/dark) */
+        .card-container.fx-flash .card-fixed-size {
+            animation: cardFlash .7s ease-out;
+        }
+        @keyframes cardFlash {
+            0%   { box-shadow: inset 0 0 0 9999px rgba(167,139,250,.22), 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -8px rgba(15,23,42,.08); }
+            100% { box-shadow: inset 0 0 0 9999px rgba(167,139,250,0),   0 1px 2px rgba(15,23,42,.04), 0 8px 24px -8px rgba(15,23,42,.08); }
+        }
+
+        .upside-down { transform: rotate(180deg); display: inline-block; }
         .card-edit-hint {
             position: absolute; inset: auto 0 0 0;
-            background: linear-gradient(to top, rgba(0,0,0,0.65), transparent);
+            background: linear-gradient(to top, rgba(15,23,42,.7), transparent);
             color: white; font-size: 11px; font-weight: 600;
-            padding: 16px 8px 8px; text-align: center; opacity: 0; transition: opacity .2s ease;
-            pointer-events: none;
+            padding: 20px 8px 10px; text-align: center;
+            opacity: 0; transform: translateY(8px);
+            transition: opacity .25s ease, transform .25s ease;
+            pointer-events: none; z-index: 2;
         }
-        .card-fixed-size:hover .card-edit-hint { opacity: 1; }
+        .card-fixed-size:hover .card-edit-hint { opacity: 1; transform: translateY(0); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .card-container, .card-fixed-size, .card-edit-hint,
+            .card-container.fx-pulse .card-fixed-size,
+            .card-container.fx-flash .card-fixed-size {
+                animation: none !important; transition: none !important;
+            }
+        }
 
         /* ---- DRAWER (sidebar + editor) ---- */
         .drawer-backdrop {
@@ -64,6 +158,14 @@
             opacity: 0; pointer-events: none; transition: opacity .25s ease;
         }
         .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+
+        /* Backdrop dédié à l'éditeur latéral : sous l'éditeur (z-30) mais au-dessus du contenu.
+           Permet de fermer l'éditeur en cliquant à l'extérieur (desktop + mobile). */
+        .editor-backdrop {
+            position: fixed; inset: 0; background: rgba(15,23,42,.4); z-index: 25;
+            opacity: 0; pointer-events: none; transition: opacity .25s ease;
+        }
+        .editor-backdrop.open { opacity: 1; pointer-events: auto; }
 
         @media (max-width: 1023px) {
             #sidebar {
@@ -170,7 +272,12 @@
         @page { margin: 0; size: A4; }
         @media print {
             .no-print { display: none !important; }
-            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important;
+                -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            .card-fixed-size { animation: none !important; transition: none !important; transform: none !important; }
+            .card-fixed-size::before, .card-edit-hint, .card-hover-tools { display: none !important; }
+            .card-index { color: #94a3b8 !important; }
             main { margin: 0 !important; padding: 0 !important; overflow: visible !important; }
             #app-shell { display: block !important; height: auto !important; overflow: visible !important; }
             #deck {
@@ -204,7 +311,7 @@
 <div id="app-shell" class="h-screen flex flex-col lg:flex-row overflow-hidden">
 
     <!-- ============ MOBILE TOPBAR ============ -->
-    <header class="no-print lg:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white sticky top-0 z-30">
+    <header class="mobile-topbar no-print lg:hidden flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white sticky top-0 z-30 shrink-0">
         <button id="open-sidebar" aria-label="Ouvrir le menu" class="p-2 rounded-lg hover:bg-gray-100">
             <i data-lucide="menu" class="w-5 h-5"></i>
         </button>
@@ -297,6 +404,13 @@
                 </div>
             </div>
 
+            <!-- THÈMES -->
+            <div class="space-y-2" data-tutorial="themes">
+                <p class="text-[11px] font-bold uppercase tracking-widest text-gray-600">Thème global</p>
+                <p class="text-[11px] text-gray-500">Applique une palette cohérente à toutes les cartes (annulable).</p>
+                <div id="themeGrid" class="grid grid-cols-4 gap-2"></div>
+            </div>
+
             <!-- EXPORTS -->
             <div class="space-y-2" data-tutorial="export">
                 <p class="text-[11px] font-bold uppercase tracking-widest text-gray-600">Exporter / Importer</p>
@@ -313,11 +427,11 @@
                     <button onclick="exportPDF()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5">
                         <i data-lucide="file-text" class="w-3.5 h-3.5"></i> PDF
                     </button>
-                    <button onclick="document.getElementById('importFile').click()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5 col-span-2">
-                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> Importer un deck (.json)
+                    <button onclick="document.getElementById('importFile').click()" class="py-2.5 text-xs font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-1.5 col-span-2" title="Sélectionnez 1 ou plusieurs .json — option fusionner disponible">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> Importer / Fusionner
                     </button>
                 </div>
-                <input type="file" id="importFile" class="hidden" accept=".json,application/json" onchange="importJSON(event)">
+                <input type="file" id="importFile" class="hidden" accept=".json,application/json,text/plain,.txt" multiple onchange="importJSON(event)">
             </div>
 
             <!-- TUTORIEL + DANGER -->
@@ -504,6 +618,9 @@
 <!-- ============ DRAWER BACKDROP ============ -->
 <div id="sidebar-backdrop" class="no-print drawer-backdrop lg:hidden" onclick="closeSidebar()"></div>
 
+<!-- ============ EDITOR BACKDROP ============ -->
+<div id="editor-backdrop" class="no-print editor-backdrop" onclick="closeEditor()"></div>
+
 <!-- ============ TOAST ============ -->
 <div id="toast-container" class="no-print" aria-live="polite" aria-atomic="true"></div>
 
@@ -557,18 +674,28 @@ const TUTO_KEY = 'edu_pro_tutorial_done_v1';
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 const DEFAULTS = {
-    styleQ: { size: 18, color: '#111827', weight: 'bold', italic: false, underline: false },
-    styleA: { size: 12, color: '#4f46e5', weight: 'bold', italic: false, underline: false },
-    styleTitle: { size: 16, color: '#111827', weight: 'bold', italic: false, underline: false },
-    styleOptions: { size: 11, color: '#4b5563', weight: 'normal', italic: false, underline: false },
+    styleQ: { size: 18, color: '#111827', weight: 'bold', italic: false, underline: false, align: 'center' },
+    styleA: { size: 12, color: '#4f46e5', weight: 'bold', italic: false, underline: false, align: 'center' },
+    styleTitle: { size: 16, color: '#111827', weight: 'bold', italic: false, underline: false, align: 'center' },
+    styleOptions: { size: 11, color: '#4b5563', weight: 'normal', italic: false, underline: false, align: 'left' },
     imgSize: 100,
     bgColor: '#ffffff'
 };
 
+const THEMES = {
+    indigo:  { name: 'Indigo',         border: '#e0e7ff', bg: '#ffffff', text: '#1e1b4b', accent: '#4f46e5', subtle: '#6366f1' },
+    emerald: { name: 'Émeraude',       border: '#d1fae5', bg: '#ffffff', text: '#064e3b', accent: '#059669', subtle: '#10b981' },
+    rose:    { name: 'Rose',           border: '#fce7f3', bg: '#fffafc', text: '#831843', accent: '#e11d48', subtle: '#be185d' },
+    amber:   { name: 'Ambre',          border: '#fde68a', bg: '#fffbeb', text: '#78350f', accent: '#d97706', subtle: '#b45309' },
+    sky:     { name: 'Ciel',           border: '#bae6fd', bg: '#f0f9ff', text: '#0c4a6e', accent: '#0284c7', subtle: '#0369a1' },
+    slate:   { name: 'Ardoise',        border: '#cbd5e1', bg: '#f8fafc', text: '#0f172a', accent: '#475569', subtle: '#64748b' },
+    mono:    { name: 'Noir & Blanc',   border: '#000000', bg: '#ffffff', text: '#000000', accent: '#000000', subtle: '#404040' },
+    dark:    { name: 'Sombre',         border: '#4b5563', bg: '#1f2937', text: '#f9fafb', accent: '#a5b4fc', subtle: '#d1d5db' }
+};
+
 let cards = [];
 let activeId = null;
-let settings = { globalTitle: 'Scientifique card', borderColor: '#e5e7eb', borderSize: 1, radius: 16 };
-let undoStack = [];
+let settings = { globalTitle: 'Mes flashcards', borderColor: '#e5e7eb', borderSize: 1, radius: 16 };
 
 /* ------------ Utils ------------ */
 const $ = id => document.getElementById(id);
@@ -586,12 +713,21 @@ function isSafeId(s) {
     return typeof s === 'string' && s.length > 0 && s.length < 128 && /^[A-Za-z0-9_-]+$/.test(s);
 }
 function sanitizeId(s) { return isSafeId(s) ? s : uid(); }
+function clampStyle(s, def) {
+    const out = { ...def, ...(s || {}) };
+    // Garde-fou : une taille corrompue (NaN, négative, démesurée) ne doit pas casser le rendu.
+    const n = parseInt(out.size);
+    out.size = Number.isFinite(n) ? Math.max(8, Math.min(48, n)) : def.size;
+    if (!['left', 'center', 'right'].includes(out.align)) out.align = def.align;
+    return out;
+}
 function ensureStyles(card) {
-    card.styleQ = { ...DEFAULTS.styleQ, ...(card.styleQ || {}) };
-    card.styleA = { ...DEFAULTS.styleA, ...(card.styleA || {}) };
-    card.styleTitle = { ...DEFAULTS.styleTitle, ...(card.styleTitle || {}) };
-    card.styleOptions = { ...DEFAULTS.styleOptions, ...(card.styleOptions || {}) };
-    if (card.imgSize == null) card.imgSize = DEFAULTS.imgSize;
+    card.styleQ = clampStyle(card.styleQ, DEFAULTS.styleQ);
+    card.styleA = clampStyle(card.styleA, DEFAULTS.styleA);
+    card.styleTitle = clampStyle(card.styleTitle, DEFAULTS.styleTitle);
+    card.styleOptions = clampStyle(card.styleOptions, DEFAULTS.styleOptions);
+    const img = parseInt(card.imgSize);
+    card.imgSize = Number.isFinite(img) ? Math.max(30, Math.min(200, img)) : DEFAULTS.imgSize;
     if (!card.bgColor) card.bgColor = DEFAULTS.bgColor;
     return card;
 }
@@ -660,6 +796,45 @@ function confirmDialog(title, body, confirmLabel = 'Confirmer', danger = true) {
     });
 }
 
+// Modal à N choix (boutons custom). Renvoie la valeur du bouton cliqué ou null si annulé.
+function choiceDialog(title, body, choices) {
+    return new Promise(resolve => {
+        const modal = document.createElement('div');
+        modal.className = 'modal-backdrop open';
+        modal.style.zIndex = '200';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <h3 class="text-base font-bold mb-2">${escapeHtml(title)}</h3>
+                <p class="text-sm text-gray-600 mb-4">${escapeHtml(body)}</p>
+                <div class="flex flex-col gap-2"></div>
+            </div>`;
+        const btnWrap = modal.querySelector('.flex.flex-col');
+        choices.forEach(c => {
+            const b = document.createElement('button');
+            b.dataset.val = c.value;
+            const variant = c.variant || 'neutral';
+            const cls = {
+                primary: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+                danger:  'bg-red-600 hover:bg-red-700 text-white',
+                neutral: 'border border-gray-200 hover:bg-gray-50 text-gray-900'
+            }[variant];
+            b.className = `w-full py-3 px-4 rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 ${cls}`;
+            b.innerHTML = (c.icon ? `<i data-lucide="${c.icon}" class="w-4 h-4"></i>` : '') + escapeHtml(c.label);
+            btnWrap.appendChild(b);
+        });
+        document.body.appendChild(modal);
+        if (window.lucide) lucide.createIcons();
+        const cleanup = (v) => { try { document.body.removeChild(modal); } catch {} document.removeEventListener('keydown', onKey); resolve(v); };
+        const onKey = e => { if (e.key === 'Escape') cleanup(null); };
+        modal.addEventListener('click', e => {
+            if (e.target === modal) return cleanup(null);
+            const btn = e.target.closest('[data-val]');
+            if (btn) cleanup(btn.dataset.val);
+        });
+        document.addEventListener('keydown', onKey);
+    });
+}
+
 /* ------------ Busy overlay ------------ */
 function busy(on, label = 'Génération en cours…') {
     $('busy-label').textContent = label;
@@ -674,6 +849,11 @@ function openSidebar() {
 function closeSidebar() {
     $('sidebar').classList.remove('open');
     $('sidebar-backdrop').classList.remove('open');
+}
+// Verrou de scroll réutilisable : la zone défilante est <main>, pas <body>.
+function lockScroll(on) {
+    const main = document.querySelector('main');
+    if (main) main.style.overflow = on ? 'hidden' : '';
 }
 
 /* ------------ Settings ------------ */
@@ -742,14 +922,19 @@ function moveCard(id, direction) {
 async function deleteCard(id) {
     const ok = await confirmDialog("Supprimer cette carte ?", "Cette action est définitive.", "Supprimer", true);
     if (!ok) return;
-    const removed = cards.find(c => c.id === id);
-    cards = cards.filter(c => c.id !== id);
+    const idx = cards.findIndex(c => c.id === id);
+    if (idx < 0) return;
+    const removed = cards[idx];
+    cards.splice(idx, 1);
     closeEditor();
     save();
     render();
     toast("Carte supprimée", '', 4000, {
         label: "Annuler",
-        handler: () => { cards.push(removed); save(); render(); toast("Carte restaurée", 'success', 1500); }
+        handler: () => {
+            cards.splice(Math.min(idx, cards.length), 0, removed);
+            save(); render(); toast("Carte restaurée", 'success', 1500);
+        }
     });
 }
 async function clearAll() {
@@ -776,12 +961,26 @@ function getFilteredCards() {
         (c.title || '').toLowerCase().includes(search)
     );
 }
+function renderThemeGrid() {
+    const grid = $('themeGrid');
+    if (!grid || grid.dataset.populated) return;
+    grid.innerHTML = Object.entries(THEMES).map(([key, t]) => `
+        <button onclick="applyTheme('${key}')" title="${escapeAttr(t.name)}" aria-label="Appliquer le thème ${escapeAttr(t.name)}"
+            class="aspect-square rounded-lg border-2 border-gray-200 hover:border-indigo-400 focus:border-indigo-500 transition flex items-end p-1"
+            style="background:linear-gradient(135deg, ${t.bg} 0%, ${t.bg} 60%, ${t.accent} 60%, ${t.accent} 100%);">
+            <span class="text-[8px] font-bold leading-none" style="color:${t.text};background:${t.bg};padding:1px 3px;border-radius:3px;">${escapeHtml(t.name.slice(0, 4))}</span>
+        </button>
+    `).join('');
+    grid.dataset.populated = '1';
+}
+
 function render() {
     const container = $('deck');
     const radius = settings.radius;
     const borderCol = settings.borderColor;
     const borderSize = settings.borderSize;
 
+    renderThemeGrid();
     $('borderVal').innerText = borderSize + 'px';
     $('radiusVal').innerText = radius + 'px';
     $('globalBorderColor').value = borderCol;
@@ -806,54 +1005,71 @@ function render() {
         const cardEl = document.createElement('div');
         cardEl.className = 'card-container group relative' + (isPageBreak ? ' page-break' : '');
         cardEl.dataset.cardId = card.id;
+        // Stagger entrance animation (max 12 cartes en cascade, après on rend instantané)
+        if (idx < 12) cardEl.style.animationDelay = (idx * 40) + 'ms';
 
+        const accent = card.styleA.color || '#4f46e5';
+        const textCol = card.styleTitle.color || card.styleQ.color || '#0f172a';
         const innerStyle = `
             border-radius: ${radius}px;
             border: ${borderSize}px solid ${borderCol};
             background-color: ${card.bgColor};
+            --card-accent: ${accent};
+            --card-border-color: ${borderCol};
+            --card-text: ${textCol};
         `;
 
         let optionsHtml = '';
         if (card.type === 'multiple') {
             const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+            const optAlign = card.styleOptions.align || 'left';
+            const optStyle = `font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-decoration:${card.styleOptions.underline ? 'underline' : 'none'};`;
+            // Si centré ou à droite, on garde le badge mais on aligne le bloc complet
             optionsHtml = lines.map((l, i) => `
-                <div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-decoration:${card.styleOptions.underline ? 'underline' : 'none'};" class="text-left w-full px-1 leading-snug">
-                    <span class="font-bold mr-1">${ALPHABET[i] || '•'})</span>${escapeHtml(l)}
+                <div class="opt-line" style="justify-content:${optAlign === 'center' ? 'center' : optAlign === 'right' ? 'flex-end' : 'flex-start'};${optStyle}line-height:1.35;padding:0 2px;">
+                    <span class="opt-badge">${ALPHABET[i] || '•'}</span>
+                    <span class="opt-text" style="text-align:${optAlign};">${escapeHtml(l)}</span>
                 </div>`).join('');
         } else {
-            optionsHtml = `<div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};" class="italic">Vrai ou Faux ?</div>`;
+            // Vrai/Faux est un libellé d'instruction (pas une option) → always centered sauf si user explicit right
+            optionsHtml = `<div style="text-align:${card.styleOptions.align === 'right' ? 'right' : 'center'};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-style:italic;letter-spacing:.02em;">Vrai ou Faux ?</div>`;
         }
 
         const titleText = card.title?.trim() || settings.globalTitle;
+        // Numéro = position réelle dans le deck (pas l'index filtré par la recherche).
+        const realIdx = cards.indexOf(card);
+        const cardNum = String((realIdx >= 0 ? realIdx : idx) + 1).padStart(2, '0');
 
         cardEl.innerHTML = `
-            <div class="card-hover-tools no-print absolute -top-3 left-1/2 -translate-x-1/2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition z-10">
-                <button aria-label="Monter" onclick="moveCard('${card.id}', 'up')" class="p-2 bg-white shadow-md rounded-full hover:text-indigo-600">
+            <div class="card-hover-tools no-print absolute -top-3 left-1/2 -translate-x-1/2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all duration-200 translate-y-1 group-hover:translate-y-0 z-10">
+                <button aria-label="Monter" onclick="moveCard('${card.id}', 'up')" class="p-2 bg-white shadow-md rounded-full hover:text-indigo-600 hover:scale-110 transition">
                     <i data-lucide="arrow-up" class="w-3.5 h-3.5"></i>
                 </button>
-                <button aria-label="Dupliquer" onclick="duplicateCard('${card.id}')" class="p-2 bg-white shadow-md rounded-full hover:text-green-600">
+                <button aria-label="Dupliquer" onclick="duplicateCard('${card.id}')" class="p-2 bg-white shadow-md rounded-full hover:text-green-600 hover:scale-110 transition">
                     <i data-lucide="copy" class="w-3.5 h-3.5"></i>
                 </button>
-                <button aria-label="Auto-ajuster cette carte" onclick="autoRescaleOne('${card.id}')" class="p-2 bg-white shadow-md rounded-full hover:text-violet-600">
+                <button aria-label="Auto-ajuster cette carte" onclick="autoRescaleOne('${card.id}')" class="p-2 bg-white shadow-md rounded-full hover:text-violet-600 hover:scale-110 transition">
                     <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
                 </button>
-                <button aria-label="Descendre" onclick="moveCard('${card.id}', 'down')" class="p-2 bg-white shadow-md rounded-full hover:text-indigo-600">
+                <button aria-label="Descendre" onclick="moveCard('${card.id}', 'down')" class="p-2 bg-white shadow-md rounded-full hover:text-indigo-600 hover:scale-110 transition">
                     <i data-lucide="arrow-down" class="w-3.5 h-3.5"></i>
                 </button>
             </div>
-            <div role="button" tabindex="0" onclick="openEditor('${card.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEditor('${card.id}')}" class="card-fixed-size shadow-sm hover:shadow-xl cursor-pointer mx-auto" style="${innerStyle}" aria-label="Éditer la carte ${escapeAttr(titleText)}">
-                <div class="w-full text-center mb-2 leading-tight" style="font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};text-decoration:${card.styleTitle.underline ? 'underline' : 'none'};">
+            <div role="button" tabindex="0" onclick="openEditor('${card.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEditor('${card.id}')}" class="card-fixed-size cursor-pointer mx-auto" style="${innerStyle}" aria-label="Éditer la carte ${escapeAttr(titleText)}">
+                <span class="card-index">${cardNum}</span>
+                <div class="w-full mb-2 leading-tight" style="text-align:${card.styleTitle.align || 'center'};font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};text-decoration:${card.styleTitle.underline ? 'underline' : 'none'};letter-spacing:.01em;">
                     ${escapeHtml(titleText)}
                 </div>
-                <div class="flex-1 flex flex-col items-center gap-3 text-center overflow-hidden">
-                    ${card.image ? `<img src="${escapeAttr(card.image)}" style="width:${card.imgSize}%;max-height:40%;" class="object-contain rounded-lg" alt="">` : ''}
-                    <div class="leading-snug" style="font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};text-decoration:${card.styleQ.underline ? 'underline' : 'none'};">
+                <div class="flex-1 flex flex-col justify-center gap-3 overflow-hidden">
+                    ${card.image ? `<div class="w-full" style="text-align:center;"><img src="${escapeAttr(card.image)}" style="width:${card.imgSize}%;max-height:40%;display:inline-block;box-shadow:0 4px 12px rgba(0,0,0,.08);" class="object-contain rounded-lg" alt=""></div>` : ''}
+                    <div class="leading-snug" style="text-align:${card.styleQ.align || 'center'};font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};text-decoration:${card.styleQ.underline ? 'underline' : 'none'};">
                         ${escapeHtml(card.question)}
                     </div>
                     <div class="w-full flex flex-col gap-1 mt-1">${optionsHtml}</div>
                 </div>
-                <div class="mt-auto pt-3 border-t border-gray-100 flex flex-col items-center">
-                    <div class="upside-down text-center leading-snug" style="font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};text-decoration:${card.styleA.underline ? 'underline' : 'none'};">
+                <div class="answer-sep"></div>
+                <div class="mt-1">
+                    <div class="upside-down leading-snug w-full" style="text-align:${card.styleA.align || 'center'};font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};text-decoration:${card.styleA.underline ? 'underline' : 'none'};">
                         ${escapeHtml(card.answer)}
                     </div>
                 </div>
@@ -876,16 +1092,31 @@ function openEditor(id) {
     const editor = $('editor');
     editor.classList.remove('translate-x-full');
     editor.setAttribute('aria-hidden', 'false');
+    $('editor-backdrop').classList.add('open');
+    lockScroll(true);
     renderEditor();
 }
 function closeEditor() {
     $('editor').classList.add('translate-x-full');
     $('editor').setAttribute('aria-hidden', 'true');
+    $('editor-backdrop').classList.remove('open');
+    lockScroll(false);
     activeId = null;
 }
 function renderEditor() {
     const card = cards.find(c => c.id === activeId);
     if (!card) return;
+
+    // Snapshot focus (id + caret + scroll) pour le restaurer après le rebuild
+    const prevActive = document.activeElement;
+    const focusSnap = (prevActive && prevActive.id && $('editorContent').contains(prevActive))
+        ? {
+            id: prevActive.id,
+            start: prevActive.selectionStart,
+            end: prevActive.selectionEnd,
+            scroll: $('editorContent').scrollTop
+          }
+        : null;
 
     $('editorContent').innerHTML = `
         <div class="space-y-6">
@@ -953,6 +1184,17 @@ function renderEditor() {
         </div>
     `;
     if (window.lucide) lucide.createIcons();
+    // Restaure focus + caret + scroll si on rebuild pendant la frappe
+    if (focusSnap) {
+        const el = document.getElementById(focusSnap.id);
+        if (el) {
+            el.focus({ preventScroll: true });
+            if (typeof el.setSelectionRange === 'function' && focusSnap.start != null) {
+                try { el.setSelectionRange(focusSnap.start, focusSnap.end); } catch {}
+            }
+            $('editorContent').scrollTop = focusSnap.scroll;
+        }
+    }
 }
 
 function textBlock(label, key, value, styleTarget, styleObj, multiline) {
@@ -969,12 +1211,18 @@ function textBlock(label, key, value, styleTarget, styleObj, multiline) {
     `;
 }
 function styleRow(target, styleObj, label) {
+    const align = styleObj.align || 'left';
     return `
         <div class="flex items-center gap-2 flex-wrap">
             <div class="flex gap-1" role="group" aria-label="Style ${escapeAttr(label)}">
                 <button aria-label="Gras" aria-pressed="${styleObj.weight === 'bold'}" onclick="toggleStyle('${target}', 'weight')" class="w-9 h-9 border rounded ${styleObj.weight === 'bold' ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="bold" class="w-3.5 h-3.5 inline"></i></button>
                 <button aria-label="Italique" aria-pressed="${styleObj.italic}" onclick="toggleStyle('${target}', 'italic')" class="w-9 h-9 border rounded ${styleObj.italic ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="italic" class="w-3.5 h-3.5 inline"></i></button>
                 <button aria-label="Souligné" aria-pressed="${styleObj.underline}" onclick="toggleStyle('${target}', 'underline')" class="w-9 h-9 border rounded ${styleObj.underline ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="underline" class="w-3.5 h-3.5 inline"></i></button>
+            </div>
+            <div class="flex gap-1" role="group" aria-label="Alignement ${escapeAttr(label)}">
+                <button aria-label="Aligner à gauche" aria-pressed="${align === 'left'}" onclick="setAlign('${target}', 'left')" class="w-9 h-9 border rounded ${align === 'left' ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="align-left" class="w-3.5 h-3.5 inline"></i></button>
+                <button aria-label="Centrer" aria-pressed="${align === 'center'}" onclick="setAlign('${target}', 'center')" class="w-9 h-9 border rounded ${align === 'center' ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="align-center" class="w-3.5 h-3.5 inline"></i></button>
+                <button aria-label="Aligner à droite" aria-pressed="${align === 'right'}" onclick="setAlign('${target}', 'right')" class="w-9 h-9 border rounded ${align === 'right' ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:bg-gray-50'}"><i data-lucide="align-right" class="w-3.5 h-3.5 inline"></i></button>
             </div>
             <div class="flex items-center border rounded px-1 ml-auto">
                 <button aria-label="Réduire taille" onclick="adjustStyleSlider('${target}', 'size', -1)" class="w-7 h-7 text-sm">−</button>
@@ -1029,6 +1277,15 @@ function updateStyle(target, prop, val) {
     save();
     render();
 }
+function setAlign(target, value) {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    ensureStyles(card);
+    card[target].align = value;
+    save();
+    render();
+    renderEditor();
+}
 function toggleStyle(target, prop) {
     const card = cards.find(c => c.id === activeId);
     if (!card) return;
@@ -1052,59 +1309,148 @@ function uploadImg(e) {
 
 /* ============================================================
    AUTO-RESCALE PRO
-   Mesure le contenu vs container et réduit les tailles
-   jusqu'à ce que tout rentre dans une carte 320×450 (ratio preview).
+   Algorithme binary-search : trouve un facteur d'échelle qui
+   remplit 85-95% de la carte (équilibré, ni overflow ni vide).
    ============================================================ */
-function measureCardOverflow(card) {
-    // Construit une carte hors écran à taille réelle preview
+// Probe en dimensions PRINT (60×85mm) — pas preview — sinon texte qui fit la preview
+// déborde quand exporté en PDF/PNG (largeur réduite = plus de word-wrap = plus de hauteur).
+// Cible un remplissage modéré (~50-65%) pour laisser de la respiration aux cartes courtes.
+const CARD_TARGET_W = 226; // 60mm @ 96dpi
+const CARD_TARGET_H = 305; // 85mm @ 96dpi minus 5% safety margin
+const FILL_MIN = 150;   // ~49% rempli (seuil sous lequel on grossit)
+const FILL_IDEAL = 200; // ~66% — la cible visuelle
+const IMG_MAX_PX = 122; // image max ~40% de la hauteur print
+
+function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
+
+// Badge lettre QCM — markup unique partagé entre le probe (auto-rescale) et l'export,
+// pour que la hauteur mesurée corresponde exactement à la carte exportée (PNG/PDF/print).
+function optBadgeHTML(letter, accent) {
+    return `<span style="display:inline-block;box-sizing:content-box;min-width:12px;height:14px;line-height:14px;padding:0 4px;border-radius:9px;font-size:9px;font-weight:700;background:${accent};color:#ffffff;margin-right:5px;text-align:center;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${letter}</span>`;
+}
+
+function buildProbeHTML(card) {
+    ensureStyles(card);
+    const titleText = card.title?.trim() || settings.globalTitle;
+    const accent = card.styleA.color || '#4f46e5';
+    const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+    // Markup identique à buildCardHTML (badge inline-block + word-wrap) → mesure fidèle.
+    const optionsHtml = card.type === 'multiple'
+        ? lines.map((l, i) => `<div style="text-align:${card.styleOptions.align || 'left'};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-decoration:${card.styleOptions.underline ? 'underline' : 'none'};line-height:1.3;word-wrap:break-word;">${optBadgeHTML(ALPHABET[i] || '•', accent)}${escapeHtml(l)}</div>`).join('')
+        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${card.styleOptions.align === 'right' ? 'right' : 'center'};color:${card.styleOptions.color};">Vrai ou Faux ?</div>`;
+    return `
+        <div style="text-align:${card.styleTitle.align || 'center'};font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};line-height:1.2;">${escapeHtml(titleText)}</div>
+        ${card.image ? `<div style="text-align:center;"><img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:${IMG_MAX_PX}px;object-fit:contain;"></div>` : ''}
+        <div style="text-align:${card.styleQ.align || 'center'};font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};line-height:1.3;">${escapeHtml(card.question)}</div>
+        <div style="display:flex;flex-direction:column;gap:2px;">${optionsHtml}</div>
+        <div style="text-align:${card.styleA.align || 'center'};padding-top:8px;margin-top:auto;border-top:1px solid #eee;font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};">${escapeHtml(card.answer)}</div>
+    `;
+}
+
+function measureContentHeight(card) {
     const probe = document.createElement('div');
+    // Padding 3mm × 2 ≈ 11.3px chaque côté, identique au print (renderCardsToPrintLayout)
     probe.style.cssText = `
         position:absolute;left:-99999px;top:0;
-        width:320px;height:auto;
-        padding:20px;display:flex;flex-direction:column;
+        width:${CARD_TARGET_W}px;
+        padding:12px;display:flex;flex-direction:column;gap:5px;
         background:white;box-sizing:border-box;
         font-family:'Plus Jakarta Sans',sans-serif;
     `;
-    const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
-    const optionsHtml = card.type === 'multiple'
-        ? lines.map((l, i) => `<div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};">${ALPHABET[i] || '•'}) ${escapeHtml(l)}</div>`).join('')
-        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;">Vrai ou Faux ?</div>`;
-    const titleText = card.title?.trim() || settings.globalTitle;
-    probe.innerHTML = `
-        <div style="text-align:center;margin-bottom:8px;font-size:${card.styleTitle.size}px;font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};line-height:1.2;">${escapeHtml(titleText)}</div>
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;">
-            ${card.image ? `<img src="${escapeAttr(card.image)}" style="width:${card.imgSize}%;max-height:40%;object-fit:contain;">` : ''}
-            <div style="font-size:${card.styleQ.size}px;font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};line-height:1.25;">${escapeHtml(card.question)}</div>
-            <div style="display:flex;flex-direction:column;gap:4px;width:100%;">${optionsHtml}</div>
-        </div>
-        <div style="margin-top:auto;padding-top:12px;border-top:1px solid #f1f5f9;text-align:center;">
-            <div style="transform:rotate(180deg);font-size:${card.styleA.size}px;font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};">${escapeHtml(card.answer)}</div>
-        </div>
-    `;
+    probe.innerHTML = buildProbeHTML(card);
     document.body.appendChild(probe);
-    const overflow = probe.scrollHeight - 450;
+    // Force layout
+    const h = probe.scrollHeight;
     document.body.removeChild(probe);
-    return overflow; // > 0 = overflow
+    return h;
+}
+
+// Baseline universel — recalibre depuis zéro pour vraiment équilibrer.
+// imgSize : respecte la préférence user, ne rétrécit qu'en cas d'overflow (factor<1).
+function applyScale(card, factor, baseImgSize) {
+    card.styleQ.size       = clamp(Math.round(18 * factor), 8, 38);
+    card.styleOptions.size = clamp(Math.round(12 * factor), 8, 26);
+    card.styleTitle.size   = clamp(Math.round(14 * factor), 8, 26);
+    card.styleA.size       = clamp(Math.round(13 * factor), 8, 24);
+    if (card.image) {
+        card.imgSize = factor < 1
+            ? clamp(Math.round(baseImgSize * Math.sqrt(factor)), 40, baseImgSize) // shrink
+            : baseImgSize;                                                         // jamais agrandir
+    }
 }
 
 function rescaleCard(card) {
     ensureStyles(card);
-    let safety = 30;
-    // 1) Réduire tailles options + question + title proportionnellement
-    while (measureCardOverflow(card) > 0 && safety-- > 0) {
-        let changed = false;
-        if (card.styleQ.size > 10) { card.styleQ.size -= 1; changed = true; }
-        if (card.styleOptions.size > 9) { card.styleOptions.size -= 1; changed = true; }
-        if (card.styleTitle.size > 12 && safety % 2 === 0) { card.styleTitle.size -= 1; changed = true; }
-        if (card.styleA.size > 9 && safety % 3 === 0) { card.styleA.size -= 1; changed = true; }
-        if (!changed) break;
+    // Snapshot avant binary search : permet de revenir si tout overflow
+    const baseImgSize = card.imgSize || 100;
+    // hi modéré (1.55) : empêche les cartes courtes d'exploser en taille géante.
+    let lo = 0.30, hi = 1.55;
+    // best initialisé sur lo (pas 1) pour garantir au moins UN changement quand jamais ≤ TARGET
+    let best = { factor: lo, dist: Infinity, h: Infinity };
+
+    for (let i = 0; i < 16; i++) {
+        const mid = (lo + hi) / 2;
+        applyScale(card, mid, baseImgSize);
+        const h = measureContentHeight(card);
+        if (h > CARD_TARGET_H) {
+            hi = mid; // trop grand → réduire
+            // Si on n'a jamais trouvé de fit, on garde le facteur le plus bas tenté
+            if (best.h === Infinity && mid < best.factor) best = { factor: mid, dist: h - CARD_TARGET_H, h };
+        } else {
+            const dist = Math.abs(FILL_IDEAL - h);
+            if (best.h === Infinity || dist < best.dist) best = { factor: mid, dist, h };
+            if (h < FILL_MIN) lo = mid; // sous-rempli → agrandir
+            else break;                  // dans la zone idéale → stop
+        }
+        if (hi - lo < 0.01) break; // convergence atteinte → inutile de continuer
     }
-    // 2) Si toujours overflow + image présente : réduire l'image
-    safety = 12;
-    while (measureCardOverflow(card) > 0 && card.image && card.imgSize > 40 && safety-- > 0) {
-        card.imgSize -= 5;
-    }
-    return measureCardOverflow(card) <= 0;
+    applyScale(card, best.factor, baseImgSize);
+    return measureContentHeight(card) <= CARD_TARGET_H;
+}
+
+function fxApply(fxClass, ids) {
+    // Déclenche une animation visuelle sur les cartes ciblées (ou toutes si null).
+    requestAnimationFrame(() => {
+        const targets = ids
+            ? ids.map(id => document.querySelector(`[data-card-id="${id}"]`)).filter(Boolean)
+            : document.querySelectorAll('.card-container');
+        targets.forEach((el, i) => {
+            // Décalage stagger pour effet de vague
+            setTimeout(() => {
+                el.classList.add(fxClass);
+                setTimeout(() => el.classList.remove(fxClass), 1100);
+            }, i * 35);
+        });
+    });
+}
+
+function applyTheme(key) {
+    const t = THEMES[key];
+    if (!t) return;
+    const snapshot = { settings: JSON.parse(JSON.stringify(settings)), cards: JSON.parse(JSON.stringify(cards)) };
+    settings.borderColor = t.border;
+    cards.forEach(c => {
+        ensureStyles(c);
+        c.bgColor = t.bg;
+        c.styleTitle.color = t.text;
+        c.styleQ.color = t.text;
+        c.styleOptions.color = t.subtle;
+        c.styleA.color = t.accent;
+    });
+    save();
+    render();
+    if (activeId) renderEditor();
+    fxApply('fx-pulse');
+    toast(`Thème « ${t.name} » appliqué`, 'success', 4000, {
+        label: 'Annuler',
+        handler: () => {
+            settings = snapshot.settings;
+            cards = snapshot.cards;
+            save(); render();
+            if (activeId) renderEditor();
+            toast("Thème restauré", 'success', 1500);
+        }
+    });
 }
 
 async function autoRescaleAll() {
@@ -1117,6 +1463,7 @@ async function autoRescaleAll() {
     save();
     render();
     busy(false);
+    fxApply('fx-flash');
     toast(`${success}/${cards.length} carte(s) ajustée(s)`, 'success', 5000, {
         label: "Annuler",
         handler: () => { cards = snapshot; cards.forEach(ensureStyles); save(); render(); toast("Tailles restaurées", 'success', 1500); }
@@ -1129,6 +1476,7 @@ function autoRescaleOne(id) {
     const ok = rescaleCard(card);
     save();
     render();
+    fxApply('fx-flash', [id]);
     if (activeId === id) renderEditor();
     toast(ok ? "Carte ajustée" : "Ajustement limite atteinte", ok ? 'success' : '', 3500, {
         label: "Annuler",
@@ -1158,33 +1506,101 @@ function downloadBlob(blob, filename) {
     a.href = url;
     a.download = filename;
     a.rel = 'noopener';
-    a.target = '_blank'; // iOS : ouvre dans nouvel onglet si download ignoré → user peut sauver
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // Revoke différé : iOS/Android peuvent encore lire l'URL après le click
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function openBlobInNewTab(blob) {
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return !!w;
+}
+async function tryNativeShare(blob, filename, mimeType) {
+    if (!navigator.share) return false;
+    try {
+        const file = new File([blob], filename, { type: mimeType || blob.type || 'application/octet-stream' });
+        const data = { files: [file], title: filename };
+        // canShare est optionnel — certains browsers (Firefox Android) ne l'exposent pas
+        if (navigator.canShare && !navigator.canShare(data)) return false;
+        await navigator.share(data);
+        return true;
+    } catch (err) {
+        if (err.name === 'AbortError') return 'cancelled';
+        return false;
+    }
+}
+function showDeliveryModal(blob, filename, mimeType) {
+    return new Promise(resolve => {
+        const sizeKB = Math.round(blob.size / 1024);
+        const sizeStr = sizeKB > 1024 ? `${(sizeKB/1024).toFixed(1)} Mo` : `${sizeKB} Ko`;
+        const modal = document.createElement('div');
+        modal.className = 'modal-backdrop open';
+        modal.style.zIndex = '200';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                        <i data-lucide="file-check-2" class="w-5 h-5 text-indigo-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold">Fichier prêt</h3>
+                        <p class="text-xs text-gray-500">${escapeHtml(filename)} · ${sizeStr}</p>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">Sur mobile, le partage natif est le plus fiable (Photos, Files, AirDrop…). Sinon « Ouvrir » affiche le fichier dans un onglet — utilisez le menu du navigateur pour l'enregistrer.</p>
+                <div class="flex flex-col gap-2">
+                    ${navigator.share ? `<button data-act="share" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2"><i data-lucide="share-2" class="w-4 h-4"></i> Partager</button>` : ''}
+                    <button data-act="download" class="w-full py-3 border border-gray-200 rounded-xl font-semibold flex items-center justify-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> Télécharger</button>
+                    <button data-act="open" class="w-full py-3 border border-gray-200 rounded-xl font-semibold flex items-center justify-center gap-2"><i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir dans un onglet</button>
+                    <button data-act="cancel" class="w-full py-2 text-gray-500 text-sm">Fermer</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        if (window.lucide) lucide.createIcons();
+
+        const cleanup = (result) => {
+            try { document.body.removeChild(modal); } catch {}
+            resolve(result);
+        };
+        modal.addEventListener('click', async e => {
+            if (e.target === modal) return cleanup('cancelled');
+            const btn = e.target.closest('[data-act]');
+            if (!btn) return;
+            const act = btn.dataset.act;
+            if (act === 'share') {
+                const r = await tryNativeShare(blob, filename, mimeType);
+                if (r === true) cleanup('shared');
+                else if (r === 'cancelled') cleanup('cancelled');
+                else { toast("Partage indisponible — essayez Télécharger ou Ouvrir.", 'error', 4000); }
+            } else if (act === 'download') {
+                downloadBlob(blob, filename);
+                cleanup('downloaded');
+            } else if (act === 'open') {
+                const ok = openBlobInNewTab(blob);
+                if (!ok) toast("Ouverture bloquée par le navigateur.", 'error', 4000);
+                else cleanup('opened');
+            } else {
+                cleanup('cancelled');
+            }
+        });
+    });
 }
 async function deliverBlob(blob, filename, mimeType) {
-    // Sur mobile : essayer le Web Share API (sheet natif iOS/Android, partage vers Files, AirDrop, WhatsApp…)
-    if (isLikelyMobile() && navigator.canShare) {
-        try {
-            const file = new File([blob], filename, { type: mimeType || blob.type || 'application/octet-stream' });
-            if (navigator.canShare({ files: [file] })) {
-                await navigator.share({ files: [file], title: filename });
-                return 'shared';
-            }
-        } catch (err) {
-            if (err.name === 'AbortError') return 'cancelled';
-            // sinon : on bascule sur download
-        }
+    // Mobile : modal avec choix (chaque clic = activation utilisateur fraîche, requis par iOS Safari)
+    if (isLikelyMobile()) {
+        return await showDeliveryModal(blob, filename, mimeType);
     }
+    // Desktop : download direct
     downloadBlob(blob, filename);
     return 'downloaded';
 }
 function deliveredMsg(result, label) {
     if (result === 'shared') return `${label} partagé`;
-    if (result === 'cancelled') return `${label} : partage annulé`;
+    if (result === 'opened') return `${label} ouvert dans un onglet`;
+    if (result === 'cancelled') return `${label} : annulé`;
     return `${label} téléchargé`;
 }
 
@@ -1218,31 +1634,41 @@ async function exportCSV() {
     toast(`${deliveredMsg(r, 'CSV')} · ${cards.length} cartes`, 'success');
 }
 
-function buildCardHTML(card, { side = 'both', mirrored = false } = {}) {
+function buildCardHTML(card, { side = 'both' } = {}) {
     ensureStyles(card);
     const titleText = card.title?.trim() || settings.globalTitle;
+    const accent = card.styleA.color || '#4f46e5';
+    const borderC = settings.borderColor || '#e5e7eb';
     const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+    const optAlign = card.styleOptions.align || 'left';
+    // Badge inline-block partagé avec le probe auto-rescale (optBadgeHTML) :
+    // height === line-height + vertical-align:middle → lettre centrée même rastérisée.
+    const badge = letter => optBadgeHTML(letter, accent);
+    // Options en blocs simples (pas de flex row) — wrap natif + alignement par text-align
     const optionsHtml = card.type === 'multiple'
-        ? lines.map((l, i) => `<div style="font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};text-align:left;line-height:1.3;"><b>${ALPHABET[i] || '•'})</b> ${escapeHtml(l)}</div>`).join('')
-        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;color:${card.styleOptions.color};">Vrai ou Faux ?</div>`;
+        ? lines.map((l, i) => `<div style="text-align:${optAlign};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-weight:${card.styleOptions.weight === 'bold' ? '700' : '400'};font-style:${card.styleOptions.italic ? 'italic' : 'normal'};line-height:1.3;word-wrap:break-word;">${badge(ALPHABET[i] || '•')}${escapeHtml(l)}</div>`).join('')
+        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${optAlign === 'right' ? 'right' : 'center'};color:${card.styleOptions.color};letter-spacing:.02em;">Vrai ou Faux ?</div>`;
+
+    // Séparateur simple : border-top + pastille via background-image (html2canvas-safe)
+    const sep = `<div style="height:8px;margin:4px 18px 2px;border-top:1px solid ${borderC};position:relative;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>`;
 
     const front = `
-        <div style="text-align:center;margin-bottom:4px;font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};line-height:1.2;">${escapeHtml(titleText)}</div>
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;overflow:hidden;">
-            ${card.image ? `<img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:40%;object-fit:contain;">` : ''}
-            <div style="font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};line-height:1.25;">${escapeHtml(card.question)}</div>
-            <div style="display:flex;flex-direction:column;gap:2px;width:100%;padding:0 4px;">${optionsHtml}</div>
+        <div style="text-align:${card.styleTitle.align || 'center'};margin-bottom:3px;font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};line-height:1.2;letter-spacing:.01em;flex-shrink:0;">${escapeHtml(titleText)}</div>
+        <div style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:4px;overflow:hidden;">
+            ${card.image ? `<div style="text-align:center;flex-shrink:0;"><img src="${escapeAttr(card.image)}" style="max-width:${card.imgSize}%;max-height:35%;object-fit:contain;"></div>` : ''}
+            <div style="text-align:${card.styleQ.align || 'center'};font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};line-height:1.25;flex-shrink:0;word-wrap:break-word;overflow-wrap:break-word;">${escapeHtml(card.question)}</div>
+            <div style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:2px;width:100%;padding:0 2px;overflow:hidden;">${optionsHtml}</div>
         </div>`;
 
+    // Réponse : div pleine largeur, rotation 180° sur le div lui-même (pas inline-block)
     const answerInline = `
-        <div style="margin-top:auto;padding-top:4px;border-top:1px solid #eee;text-align:center;">
-            <div style="transform:rotate(180deg);font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};">${escapeHtml(card.answer)}</div>
-        </div>`;
+        ${sep}
+        <div style="flex-shrink:0;text-align:${card.styleA.align || 'center'};transform:rotate(180deg);font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};word-wrap:break-word;line-height:1.25;">${escapeHtml(card.answer)}</div>`;
 
     const answerFull = `
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;">
-            <div style="font-size:10px;color:#9ca3af;letter-spacing:.1em;text-transform:uppercase;font-weight:700;">Réponse</div>
-            <div style="font-size:${Math.max(14, card.styleA.size + 4)}px;color:${card.styleA.color};font-weight:700;line-height:1.3;">${escapeHtml(card.answer)}</div>
+        <div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;overflow:hidden;">
+            <div style="font-size:10px;color:#9ca3af;letter-spacing:.1em;text-transform:uppercase;font-weight:700;flex-shrink:0;">Réponse</div>
+            <div style="font-size:${Math.max(14, card.styleA.size + 4)}px;color:${card.styleA.color};font-weight:700;line-height:1.3;word-wrap:break-word;overflow:hidden;">${escapeHtml(card.answer)}</div>
             <div style="font-size:10px;color:#9ca3af;margin-top:8px;">${escapeHtml(titleText)}</div>
         </div>`;
 
@@ -1325,30 +1751,55 @@ async function renderCardsToPrintLayout(mode = 'both') {
         for (const group of groups) buildPage(group, 'both', false);
     }
 
+    // Dernière page : pas de saut forcé → évite une page blanche finale à l'impression.
+    if (pages.length) {
+        const last = pages[pages.length - 1];
+        last.style.pageBreakAfter = 'auto';
+        last.style.breakAfter = 'auto';
+    }
+
     const imgs = root.querySelectorAll('img');
     await Promise.all([...imgs].map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
+    // Masque les images cassées/non chargées : sinon html2canvas tainte le canvas
+    // et toBlob/toDataURL échouent (SecurityError) → export PNG/PDF planté.
+    imgs.forEach(img => { if (!img.complete || !img.naturalWidth) img.style.display = 'none'; });
     return { root, pages };
 }
 
 async function exportPNG() {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
     busy(true, "Génération du PNG…");
+    let layout = null;
     try {
-        const { root, pages } = await renderCardsToPrintLayout('both');
-        let lastResult = 'downloaded';
+        layout = await renderCardsToPrintLayout('both');
+        const { pages } = layout;
+        // Multi-page sur mobile : 1 modal × N pages = enfer UX → suggérer PDF
+        if (pages.length > 1 && isLikelyMobile()) {
+            toast(`Deck de ${pages.length} pages : préférez l'export PDF (un seul fichier).`, '', 6000);
+        }
+        // Pré-générer tous les blobs avant toute interaction utilisateur
+        const blobs = [];
         for (let i = 0; i < pages.length; i++) {
             const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-            const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-            const suffix = pages.length > 1 ? `-p${i+1}` : '';
-            lastResult = await deliverBlob(blob, safeFilename('deck-educards') + suffix + '.png', 'image/png');
-            if (lastResult === 'cancelled') break;
+            blobs.push(await new Promise(res => canvas.toBlob(res, 'image/png')));
         }
-        document.body.removeChild(root);
-        toast(`${deliveredMsg(lastResult, 'PNG')} · ${pages.length} page${pages.length>1?'s':''}`, 'success');
+        busy(false); // libérer le spinner avant la modal mobile
+        // Single page : flux normal (modal mobile / download desktop)
+        if (blobs.length === 1) {
+            const r = await deliverBlob(blobs[0], safeFilename('deck-educards') + '.png', 'image/png');
+            toast(`${deliveredMsg(r, 'PNG')}`, 'success');
+        } else {
+            // Multi-page : download direct (pas de modal × N)
+            blobs.forEach((blob, i) => {
+                downloadBlob(blob, safeFilename('deck-educards') + `-p${i+1}.png`);
+            });
+            toast(`PNG téléchargé · ${blobs.length} pages`, 'success');
+        }
     } catch (err) {
         console.error(err);
         toast("Erreur lors de l'export PNG.", 'error', 5000);
     } finally {
+        if (layout) { try { document.body.removeChild(layout.root); } catch {} }
         busy(false);
     }
 }
@@ -1357,24 +1808,27 @@ async function exportPDF(mode = 'both') {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
     if (!window.jspdf) { toast("Bibliothèque PDF non chargée.", 'error'); return; }
     busy(true, "Génération du PDF…");
+    let layout = null;
     try {
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const { root, pages } = await renderCardsToPrintLayout(mode);
+        layout = await renderCardsToPrintLayout(mode);
+        const { pages } = layout;
         for (let i = 0; i < pages.length; i++) {
             const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
             const imgData = canvas.toDataURL('image/jpeg', 0.92);
             if (i > 0) pdf.addPage();
             pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
         }
-        document.body.removeChild(root);
         const blob = pdf.output('blob');
+        busy(false); // libérer le spinner avant la modal mobile
         const r = await deliverBlob(blob, safeFilename('deck-educards') + '.pdf', 'application/pdf');
         toast(`${deliveredMsg(r, 'PDF')} · ${pages.length} page${pages.length>1?'s':''}`, 'success');
     } catch (err) {
         console.error(err);
         toast("Erreur lors de l'export PDF.", 'error', 5000);
     } finally {
+        if (layout) { try { document.body.removeChild(layout.root); } catch {} }
         busy(false);
     }
 }
@@ -1382,9 +1836,12 @@ async function exportPDF(mode = 'both') {
 async function printDeck(mode = 'both') {
     if (cards.length === 0) { toast("Aucune carte à imprimer.", 'error'); return; }
     busy(true, "Préparation de l'impression…");
+    let root = null, iframe = null;
     try {
-        const { root, pages } = await renderCardsToPrintLayout(mode);
-        const iframe = document.createElement('iframe');
+        const layout = await renderCardsToPrintLayout(mode);
+        root = layout.root;
+        const pages = layout.pages;
+        iframe = document.createElement('iframe');
         iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
         document.body.appendChild(iframe);
         const doc = iframe.contentDocument;
@@ -1424,6 +1881,9 @@ async function printDeck(mode = 'both') {
     } catch (err) {
         console.error(err);
         toast("Erreur lors de l'impression.", 'error', 5000);
+        // Nettoyage si l'erreur survient avant le retrait normal du DOM.
+        if (root && root.parentNode) { try { document.body.removeChild(root); } catch {} }
+        if (iframe && iframe.parentNode) { try { document.body.removeChild(iframe); } catch {} }
     } finally {
         busy(false);
     }
@@ -1439,34 +1899,170 @@ function openPrintOptions() {
 function closePrintOptions() { $('print-options-backdrop').classList.remove('open'); }
 
 /* ------------ Import ------------ */
-async function importJSON(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    e.target.value = ''; // reset for re-import
-    const text = await file.text();
-    let imported;
-    try { imported = JSON.parse(text); } catch { toast("Fichier JSON invalide.", 'error'); return; }
+// Validation CSS : on n'accepte que les couleurs hex (#abc / #aabbcc / #aabbccdd)
+const SAFE_COLOR_RE = /^#[0-9a-f]{3,8}$/i;
+function safeColor(v, fallback) {
+    return (typeof v === 'string' && SAFE_COLOR_RE.test(v.trim())) ? v.trim() : fallback;
+}
+function safeStyle(raw, defaults) {
+    const r = raw && typeof raw === 'object' ? raw : {};
+    const align = ['left','center','right'].includes(r.align) ? r.align : defaults.align;
+    return {
+        size: Number.isFinite(+r.size) ? clamp(parseInt(r.size), 6, 60) : defaults.size,
+        color: safeColor(r.color, defaults.color),
+        weight: r.weight === 'bold' ? 'bold' : 'normal',
+        italic: !!r.italic,
+        underline: !!r.underline,
+        align
+    };
+}
+function normalizeImportedCard(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    // Accepte plusieurs noms de champs (anciens decks, variantes)
+    const question = raw.question ?? raw.q ?? raw.front ?? raw.recto ?? raw.prompt ?? '';
+    const answer = raw.answer ?? raw.a ?? raw.back ?? raw.verso ?? raw.solution ?? '';
+    // Rejette les entrées sans question ni réponse
+    if (!String(question).trim() && !String(answer).trim()) return null;
 
-    // Support v1 (array) et v2 ({version, settings, cards})
-    let newCards, newSettings = null;
-    if (Array.isArray(imported)) newCards = imported;
-    else if (imported && Array.isArray(imported.cards)) { newCards = imported.cards; newSettings = imported.settings; }
-    else { toast("Schéma JSON non reconnu.", 'error'); return; }
+    // Options : peut être string avec \n, tableau, ou rien
+    let options = '';
+    if (Array.isArray(raw.options)) options = raw.options.join('\n');
+    else if (typeof raw.options === 'string') options = raw.options;
+    else if (Array.isArray(raw.choices)) options = raw.choices.join('\n');
+    else if (typeof raw.choices === 'string') options = raw.choices;
 
-    if (!newCards.every(c => c && typeof c.question === 'string')) {
-        toast("Fichier contient des entrées invalides.", 'error'); return;
+    let type = raw.type;
+    if (type !== 'multiple' && type !== 'boolean') {
+        type = options.trim() ? 'multiple' : 'boolean';
     }
 
-    const ok = cards.length === 0
-        ? true
-        : await confirmDialog("Remplacer le deck actuel ?", `Cela va écraser ${cards.length} carte(s) par ${newCards.length} importée(s).`, "Remplacer", true);
-    if (!ok) return;
+    // image : data: URL ou http(s) — pas de javascript: ni rien d'autre
+    let image = null;
+    if (typeof raw.image === 'string') {
+        const trimmed = raw.image.trim();
+        if (/^(data:image\/|https?:\/\/)/i.test(trimmed)) image = trimmed;
+    }
 
-    cards = newCards.map(c => ensureStyles({ ...c, id: sanitizeId(c.id) }));
-    if (newSettings) settings = { ...settings, ...newSettings };
+    // imgSize : accepte number ou string numérique
+    const imgRaw = typeof raw.imgSize === 'string' ? Number(raw.imgSize) : raw.imgSize;
+    const imgSize = Number.isFinite(imgRaw) ? clamp(imgRaw, 30, 200) : DEFAULTS.imgSize;
+
+    return {
+        id: sanitizeId(raw.id),
+        question: String(question),
+        answer: String(answer),
+        type,
+        options,
+        image,
+        bgColor: safeColor(raw.bgColor, DEFAULTS.bgColor),
+        title: typeof raw.title === 'string' ? raw.title : '',
+        imgSize,
+        styleQ: safeStyle(raw.styleQ, DEFAULTS.styleQ),
+        styleA: safeStyle(raw.styleA, DEFAULTS.styleA),
+        styleTitle: safeStyle(raw.styleTitle, DEFAULTS.styleTitle),
+        styleOptions: safeStyle(raw.styleOptions, DEFAULTS.styleOptions)
+    };
+}
+function safeSettings(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const out = {};
+    if (typeof raw.globalTitle === 'string') out.globalTitle = raw.globalTitle.slice(0, 200);
+    if (raw.borderColor) {
+        const c = safeColor(raw.borderColor, null);
+        if (c) out.borderColor = c;
+    }
+    if (Number.isFinite(+raw.borderSize)) out.borderSize = clamp(parseInt(raw.borderSize), 0, 10);
+    if (Number.isFinite(+raw.radius)) out.radius = clamp(parseInt(raw.radius), 0, 80);
+    return out;
+}
+
+// Extrait { rawCards, newSettings } d'un JSON parsé, en supportant tous les schémas connus.
+function extractDeckPayload(imported) {
+    if (Array.isArray(imported)) return { rawCards: imported, newSettings: null };
+    if (!imported || typeof imported !== 'object') return null;
+    if (Array.isArray(imported.cards)) return { rawCards: imported.cards, newSettings: imported.settings };
+    if (Array.isArray(imported.deck))  return { rawCards: imported.deck,  newSettings: imported.settings };
+    if (Array.isArray(imported.flashcards)) return { rawCards: imported.flashcards, newSettings: null };
+    if (imported.question || imported.answer) return { rawCards: [imported], newSettings: null };
+    return null;
+}
+
+async function importJSON(e) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    e.target.value = '';
+
+    // Parse tous les fichiers, accumule les cartes (multi-sélection = fusion auto)
+    let allCards = [];
+    let firstSettings = null;
+    let totalSkipped = 0;
+    let errored = [];
+
+    for (const file of files) {
+        let text, imported;
+        try { text = await file.text(); }
+        catch { errored.push(`${file.name} (lecture)`); continue; }
+        try { imported = JSON.parse(text); }
+        catch { errored.push(`${file.name} (JSON invalide)`); continue; }
+        const payload = extractDeckPayload(imported);
+        if (!payload) { errored.push(`${file.name} (schéma)`); continue; }
+        const norm = payload.rawCards.map(normalizeImportedCard).filter(Boolean);
+        totalSkipped += payload.rawCards.length - norm.length;
+        if (firstSettings == null && payload.newSettings) firstSettings = payload.newSettings;
+        allCards = allCards.concat(norm);
+    }
+
+    if (errored.length) toast(`Fichier(s) ignoré(s) : ${errored.join(', ')}`, 'error', 6000);
+    if (allCards.length === 0) {
+        toast("Aucune carte exploitable.", 'error', 5000);
+        return;
+    }
+
+    // Compatibilité : on garde les noms locaux utilisés plus bas
+    const normalized = allCards;
+    const newSettings = firstSettings;
+    const skipped = totalSkipped;
+    const multi = files.length > 1;
+
+    let mode = 'replace';
+    if (cards.length > 0) {
+        const source = multi ? `${files.length} fichiers` : 'le fichier';
+        const choice = await choiceDialog(
+            "Importer le deck",
+            `Vous avez déjà ${cards.length} carte(s). ${source} contient ${normalized.length} carte(s)${skipped ? ` (${skipped} ignorée(s))` : ''}.`,
+            [
+                { value: 'merge',   label: `Fusionner (+${normalized.length})`, icon: 'git-merge', variant: 'primary' },
+                { value: 'replace', label: `Remplacer (efface les ${cards.length} actuelles)`, icon: 'replace', variant: 'danger' },
+                { value: 'cancel',  label: 'Annuler', variant: 'neutral' }
+            ]
+        );
+        if (!choice || choice === 'cancel') return;
+        mode = choice;
+    }
+
+    if (mode === 'merge') {
+        // Regénère TOUS les ids importés pour garantir l'unicité (entre fichiers et avec l'existant)
+        const fresh = normalized.map(c => ({ ...c, id: uid() }));
+        cards = cards.concat(fresh);
+        toast(`Deck fusionné · +${fresh.length} cartes · total ${cards.length}${multi ? ` · ${files.length} fichiers` : ''}`, 'success');
+    } else {
+        // Multi-file replace : dédup interne aussi (deux fichiers peuvent avoir même id)
+        const seen = new Set();
+        cards = normalized.map(c => {
+            if (seen.has(c.id)) c = { ...c, id: uid() };
+            seen.add(c.id);
+            return c;
+        });
+        toast(`Deck importé · ${cards.length} cartes${multi ? ` (${files.length} fichiers)` : ''}${skipped ? ` · ${skipped} ignorée(s)` : ''}`, 'success');
+    }
+
+    // Settings : seulement appliqués en mode replace (fusionner ne touche pas le design global)
+    if (mode === 'replace') {
+        const safeImported = safeSettings(newSettings);
+        if (safeImported) settings = { ...settings, ...safeImported };
+    }
     save();
     render();
-    toast(`Deck importé (${cards.length} cartes)`, 'success');
 }
 
 /* ============================================================
@@ -1482,13 +2078,29 @@ const tutorialSteps = [
 ];
 let tutoIndex = 0;
 
+let tutoTempCardId = null;
 function startTutorial() {
     tutoIndex = 0;
-    // S'il n'y a pas de cartes, on en ajoute une pour le tour
-    if (cards.length === 0) addCard();
+    // S'il n'y a pas de cartes, on crée une carte de DÉMO éphémère (non sauvegardée)
+    // juste pour le tour — retirée à la fin pour ne pas polluer le deck de l'utilisateur.
+    if (cards.length === 0) {
+        const demo = ensureStyles({
+            id: uid(),
+            question: "Exemple : quelle est la capitale de la France ?",
+            type: "multiple",
+            options: "Paris\nLyon\nMarseille",
+            answer: "Paris",
+            image: null,
+            title: ''
+        });
+        cards.push(demo);
+        tutoTempCardId = demo.id;
+        render(); // pas de save() : la carte de démo ne doit pas persister
+    }
     $('tutorial-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
     renderTutorialStep();
+    document.removeEventListener('keydown', tutoKeyHandler); // évite les doublons si relancé
     document.addEventListener('keydown', tutoKeyHandler);
 }
 function endTutorial() {
@@ -1496,6 +2108,12 @@ function endTutorial() {
     document.body.style.overflow = '';
     localStorage.setItem(TUTO_KEY, '1');
     document.removeEventListener('keydown', tutoKeyHandler);
+    // Retire la carte de démo éphémère si elle n'a pas été remplacée par du contenu réel.
+    if (tutoTempCardId) {
+        cards = cards.filter(c => c.id !== tutoTempCardId);
+        tutoTempCardId = null;
+        render();
+    }
 }
 function tutoKeyHandler(e) {
     if (e.key === 'Escape') endTutorial();
@@ -1509,6 +2127,7 @@ function renderTutorialStep() {
     $('tutoTitle').textContent = step.title;
     $('tutoBody').textContent = step.body;
     $('tutoPrev').disabled = tutoIndex === 0;
+    $('tutoPrev').setAttribute('aria-disabled', String(tutoIndex === 0));
     $('tutoPrev').style.opacity = tutoIndex === 0 ? '.5' : '1';
     $('tutoNext').textContent = tutoIndex === tutorialSteps.length - 1 ? "Terminer" : "Suivant";
 
@@ -1569,7 +2188,10 @@ let studyHideAnswer = false;
 
 function openStudyMode() {
     if (cards.length === 0) { toast("Aucune carte à étudier.", 'error'); return; }
-    studyOrder = cards.map((_, i) => i);
+    closeSidebar();
+    closeEditor();
+    // On référence les cartes par ID (pas par index) : reste valide même si le deck change.
+    studyOrder = cards.map(c => c.id);
     studyIdx = 0;
     studyFlipped = false;
     studyHideAnswer = false;
@@ -1585,8 +2207,8 @@ function closeStudyMode() {
     document.body.style.overflow = '';
 }
 function renderStudyCard() {
-    const card = cards[studyOrder[studyIdx]];
-    if (!card) return;
+    const card = cards.find(c => c.id === studyOrder[studyIdx]);
+    if (!card) { closeStudyMode(); return; }
     ensureStyles(card);
     $('studyProgress').textContent = `${studyIdx + 1} / ${studyOrder.length}`;
     const titleText = card.title?.trim() || settings.globalTitle;
@@ -1612,6 +2234,13 @@ function renderStudyCard() {
             </div>
         `;
     $('studyCardInner').style.transform = studyFlipped ? 'rotateY(180deg)' : 'rotateY(0)';
+
+    // Reflète l'état "verso masqué" sur l'icône du bouton (eye / eye-off).
+    // On reconstruit le <i> car lucide.createIcons() remplace l'<i> par un <svg>
+    // sans attribut data-lucide : impossible de le re-cibler ensuite.
+    $('studyToggleAnswer').innerHTML =
+        `<i data-lucide="${studyHideAnswer ? 'eye' : 'eye-off'}" class="w-4 h-4"></i><span class="hidden sm:inline">Verso</span>`;
+    if (window.lucide) lucide.createIcons();
 }
 function studyFlip() { studyFlipped = !studyFlipped; renderStudyCard(); }
 function studyNext() { studyIdx = (studyIdx + 1) % studyOrder.length; studyFlipped = false; renderStudyCard(); }
@@ -1681,6 +2310,8 @@ const TEMPLATES = {
 function loadTemplate(key) {
     const tpl = TEMPLATES[key];
     if (!tpl) return;
+    const prevTitle = settings.globalTitle;
+    const addedIds = [];
     settings.globalTitle = tpl.title;
     tpl.cards.forEach(c => {
         const card = ensureStyles({
@@ -1693,10 +2324,19 @@ function loadTemplate(key) {
             title: ''
         });
         cards.push(card);
+        addedIds.push(card.id);
     });
     save();
     render();
-    toast(`Modèle « ${tpl.title} » chargé`, 'success');
+    toast(`Modèle « ${tpl.title} » chargé`, 'success', 5000, {
+        label: "Annuler",
+        handler: () => {
+            settings.globalTitle = prevTitle;
+            cards = cards.filter(c => !addedIds.includes(c.id));
+            save(); render();
+            toast("Modèle annulé", 'success', 1500);
+        }
+    });
 }
 
 /* ============================================================
