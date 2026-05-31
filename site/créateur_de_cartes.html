@@ -1310,26 +1310,33 @@ function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
 
 // Badge lettre QCM (cercle plein A B C…) — markup unique partagé entre l'éditeur live,
 // le probe (auto-rescale) et l'export (PNG/PDF/print).
-// IMPORTANT : html2canvas 1.4.1 rend mal le flexbox → on n'utilise PAS inline-flex ici.
-// Cercle parfait via border-radius:50% sur un carré 18×18, et lettre centrée sur les 2 axes
-// par position:absolute + translate(-50%,-50%) (fidèlement reproduit par html2canvas comme
-// par le navigateur) → l'aperçu correspond exactement au PDF/PNG/impression.
+// IMPORTANT : html2canvas 1.4.1 rend mal flexbox / transform / enfant position:absolute
+// (le rond flottait au-dessus du texte, lettre non centrée). On rend donc le badge en SVG
+// inline : c'est le moteur SVG du navigateur qui le rastérise (y compris via html2canvas),
+// donc le cercle et la lettre sont centrés à l'identique partout. Lettre centrée par
+// text-anchor=middle (horizontal) + dy (vertical), police système pour des métriques stables.
 function optBadgeHTML(letter, accent) {
-    return `<span style="position:relative;display:inline-block;box-sizing:border-box;width:18px;height:18px;border-radius:50%;background:${accent};margin-right:8px;vertical-align:top;-webkit-print-color-adjust:exact;print-color-adjust:exact;">`
-        + `<span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:10px;line-height:1;font-weight:700;color:#ffffff;white-space:nowrap;">${letter}</span></span>`;
+    const c = escapeAttr(accent);
+    const L = escapeHtml(letter);
+    return `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" style="display:block;">`
+        + `<circle cx="9" cy="9" r="9" fill="${c}"></circle>`
+        + `<text x="9" y="9" dy="3.5" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="10" font-weight="700" fill="#ffffff">${L}</text>`
+        + `</svg>`;
 }
 
-// Ligne d'option QCM (badge cercle + texte) — markup inline unique (PAS de flex, pour que
-// html2canvas reproduise exactement le rendu navigateur). Le badge inline-block est aligné en
-// haut (vertical-align:top, comme align-items:flex-start de l'aperçu) et le texte suit ;
-// l'alignement gauche/centre/droite est porté par text-align.
+// Ligne d'option QCM (badge cercle + texte) — markup unique partagé aperçu/probe/export.
+// Mise en page en CSS table (PAS de flex) : html2canvas 1.4.1 lit la géométrie réelle du
+// navigateur, donc table-cell + vertical-align:middle centre le rond sur le texte de façon
+// fiable et identique entre l'aperçu et le PDF/PNG/impression.
 function optLineHTML(letter, text, accent, so) {
     const align = so.align || 'left';
-    const style = `text-align:${align};font-size:${so.size}px;color:${so.color};`
+    const txt = `display:table-cell;vertical-align:middle;text-align:${align};font-size:${so.size}px;color:${so.color};`
         + `font-weight:${so.weight === 'bold' ? '700' : '400'};font-style:${so.italic ? 'italic' : 'normal'};`
-        + `text-decoration:${so.underline ? 'underline' : 'none'};line-height:1.35;padding:0 2px;`
+        + `text-decoration:${so.underline ? 'underline' : 'none'};line-height:1.3;`
         + `word-wrap:break-word;overflow-wrap:break-word;`;
-    return `<div style="${style}">${optBadgeHTML(letter, accent)}<span style="vertical-align:top;">${escapeHtml(text)}</span></div>`;
+    return `<div style="display:table;width:100%;">`
+        + `<div style="display:table-cell;vertical-align:middle;width:18px;padding-right:8px;">${optBadgeHTML(letter, accent)}</div>`
+        + `<div style="${txt}">${escapeHtml(text)}</div></div>`;
 }
 
 function buildProbeHTML(card) {
