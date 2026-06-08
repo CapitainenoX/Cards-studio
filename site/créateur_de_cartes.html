@@ -757,8 +757,147 @@ function boolAnswerIsYes(card) {
     return card.answer !== 'Faux';
 }
 
+/* ============================================================
+   STOCKAGE — IndexedDB pour les images (Blob), localStorage pour
+   les métadonnées légères. Permet des centaines d'images sans saturer
+   le quota localStorage (~5 Mo). Images compressées (WebP/JPEG) à l'import.
+   Rétro-compat : migration auto des anciennes images base64. Repli localStorage
+   si IndexedDB indisponible (mode privé).
+   ============================================================ */
+const DB_NAME = 'educards_db', DB_VER = 1, IMG_STORE = 'images';
+let _dbPromise = null;
+let idbAvailable = true;
+
+function idb() {
+    if (_dbPromise) return _dbPromise;
+    _dbPromise = new Promise((resolve, reject) => {
+        if (!window.indexedDB) { idbAvailable = false; reject(new Error('no-indexeddb')); return; }
+        let req;
+        try { req = indexedDB.open(DB_NAME, DB_VER); }
+        catch (e) { idbAvailable = false; reject(e); return; }
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(IMG_STORE)) db.createObjectStore(IMG_STORE, { keyPath: 'id' });
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => { idbAvailable = false; reject(req.error); };
+    });
+    return _dbPromise;
+}
+function idbReq(req) { return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+async function imgPut(id, blob) { const db = await idb(); const st = db.transaction(IMG_STORE, 'readwrite').objectStore(IMG_STORE); await idbReq(st.put({ id, blob })); }
+async function imgGet(id) { try { const db = await idb(); const st = db.transaction(IMG_STORE, 'readonly').objectStore(IMG_STORE); const r = await idbReq(st.get(id)); return r ? r.blob : null; } catch { return null; } }
+async function imgDelete(id) { try { const db = await idb(); const st = db.transaction(IMG_STORE, 'readwrite').objectStore(IMG_STORE); await idbReq(st.delete(id)); } catch {} }
+async function imgAllIds() { try { const db = await idb(); const st = db.transaction(IMG_STORE, 'readonly').objectStore(IMG_STORE); return await idbReq(st.getAllKeys()); } catch { return []; } }
+
+// Cache d'object-URLs (imageId → blob: URL) pour éviter de recréer/fuiter des URLs.
+const imgURLCache = new Map();
+function blobToDataURL(blob) { return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); }); }
+async function dataURLToBlob(dataURL) { try { const r = await fetch(dataURL); return await r.blob(); } catch { return null; } }
+
+// Charge un fichier image en HTMLImageElement (universel, gère SVG/JPEG/PNG/WebP).
+function loadImageEl(srcURL) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('image-decode'));
+        img.src = srcURL;
+    });
+}
+function canvasToBlob(canvas, type, q) { return new Promise(res => canvas.toBlob(res, type, q)); }
+
+// Compresse/redimensionne une image (max 1280px) → Blob WebP (repli JPEG).
+// Renvoie le plus petit entre la version compressée et l'original.
+async function compressImageFile(file) {
+    const url = URL.createObjectURL(file);
+    let img;
+    try { img = await loadImageEl(url); }
+    finally { setTimeout(() => URL.revokeObjectURL(url), 2000); }
+    const MAX = 1280;
+    let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (!w || !h) return file;
+    const scale = Math.min(1, MAX / Math.max(w, h));
+    w = Math.max(1, Math.round(w * scale));
+    h = Math.max(1, Math.round(h * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    let blob = await canvasToBlob(canvas, 'image/webp', 0.82);
+    if (!blob || blob.type !== 'image/webp') blob = await canvasToBlob(canvas, 'image/jpeg', 0.85);
+    if (!blob) return file;
+    // Si l'original (déjà optimisé) est plus léger, on le garde.
+    return (file.size && file.size < blob.size && /^image\//.test(file.type)) ? file : blob;
+}
+
+// Résout l'image runtime (card.image) d'une carte à partir de son stockage persistant.
+// imageId (Blob IDB) > imageURL (lien externe) > image base64 hérité (migré vers IDB).
+async function migrateCardImage(card) {
+    if (card.imageId) {
+        if (imgURLCache.has(card.imageId)) { card.image = imgURLCache.get(card.imageId); return; }
+        const blob = await imgGet(card.imageId);
+        if (blob) { const u = URL.createObjectURL(blob); imgURLCache.set(card.imageId, u); card.image = u; }
+        else { card.imageId = null; card.image = null; }
+        return;
+    }
+    if (typeof card.imageURL === 'string' && card.imageURL) { card.image = card.imageURL; return; }
+    if (typeof card.image === 'string' && card.image.startsWith('data:image/')) {
+        // Image base64 héritée → on la déplace dans IndexedDB (libère localStorage).
+        const blob = await dataURLToBlob(card.image);
+        if (blob && idbAvailable) {
+            const id = uid();
+            try {
+                await imgPut(id, blob);
+                card.imageId = id;
+                const u = URL.createObjectURL(blob);
+                imgURLCache.set(id, u);
+                card.image = u;
+                return;
+            } catch { /* repli : on garde le base64 runtime + persisté */ }
+        }
+        // Repli sans IDB : on conserve le base64 tel quel.
+        return;
+    }
+    if (typeof card.image === 'string' && /^https?:\/\//i.test(card.image)) {
+        card.imageURL = card.image; return;
+    }
+}
+
+// Supprime l'image d'une carte (blob IDB + object-URL). Pas d'undo sur l'image.
+async function detachCardImage(card) {
+    if (card.imageId) {
+        const u = imgURLCache.get(card.imageId);
+        if (u) { URL.revokeObjectURL(u); imgURLCache.delete(card.imageId); }
+        await imgDelete(card.imageId);
+    }
+    card.imageId = null; card.imageURL = null; card.image = null;
+}
+
+// Ramasse-miettes : supprime les blobs IDB qui ne sont plus référencés par aucune carte.
+// Appelé au démarrage (les cartes supprimées en session restent annulables jusque-là).
+async function gcImages() {
+    if (!idbAvailable) return;
+    try {
+        const refed = new Set(cards.map(c => c.imageId).filter(Boolean));
+        const all = await imgAllIds();
+        for (const id of all) {
+            if (!refed.has(id)) {
+                await imgDelete(id);
+                const u = imgURLCache.get(id);
+                if (u) { URL.revokeObjectURL(u); imgURLCache.delete(id); }
+            }
+        }
+    } catch {}
+}
+
 /* ------------ Load / Save ------------ */
-function loadState() {
+// Version persistée d'une carte : pas d'object-URL runtime ni de base64 (sauf repli sans IDB).
+function cardForStorage(c) {
+    const { image, ...rest } = c;
+    if (!rest.imageId && typeof image === 'string' && image.startsWith('data:')) rest.image = image; // repli sans IDB
+    return rest;
+}
+async function loadState() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         cards = raw ? JSON.parse(raw) : [];
@@ -769,13 +908,17 @@ function loadState() {
         const s = localStorage.getItem(SETTINGS_KEY);
         if (s) settings = { ...settings, ...JSON.parse(s) };
     } catch (e) {}
+    // Migration/hydratation des images (séquentiel pour ne pas saturer IDB).
+    for (const c of cards) { try { await migrateCardImage(c); } catch {} }
+    // Réécrit le stockage (sans base64 désormais déplacé dans IDB).
+    save();
 }
 function save() {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cards.map(cardForStorage)));
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch (e) {
-        toast("Sauvegarde impossible : quota localStorage dépassé. Exportez en JSON pour ne rien perdre.", 'error', 8000);
+        toast("Sauvegarde impossible : quota dépassé. Les images sont stockées séparément ; exportez en JSON pour sécuriser vos données.", 'error', 8000);
     }
 }
 
@@ -919,11 +1062,21 @@ function addCard() {
     closeSidebar();
     toast("Carte ajoutée", 'success', 1500);
 }
-function duplicateCard(id) {
+async function duplicateCard(id) {
     const original = cards.find(c => c.id === id);
     if (!original) return;
-    const copy = JSON.parse(JSON.stringify(original));
+    // On part de la version « stockage » (sans object-URL runtime) puis on recopie l'image.
+    const copy = JSON.parse(JSON.stringify(cardForStorage(original)));
     copy.id = uid();
+    // L'image est copiée dans un NOUVEAU blob → chaque carte possède la sienne (suppression sûre).
+    if (original.imageId) {
+        const blob = await imgGet(original.imageId);
+        if (blob && idbAvailable) {
+            const nid = uid();
+            try { await imgPut(nid, blob); copy.imageId = nid; } catch { copy.imageId = null; }
+        } else { copy.imageId = null; }
+    }
+    await migrateCardImage(copy); // hydrate copy.image
     const idx = cards.findIndex(c => c.id === id);
     cards.splice(idx + 1, 0, copy);
     save();
@@ -1128,7 +1281,7 @@ function renderEditor() {
                     </div>
                     <div class="flex items-center gap-2">
                         <input id="cardImgInput" type="file" accept="image/*" onchange="uploadImg(event)" class="text-xs w-full">
-                        ${card.image ? `<button onclick="updateProp('image', null);renderEditor()" aria-label="Supprimer l'image" class="p-1.5 border border-gray-200 rounded hover:bg-white"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+                        ${card.image ? `<button onclick="removeCardImage()" aria-label="Supprimer l'image" class="p-1.5 border border-gray-200 rounded hover:bg-white"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
                     </div>
                     <div class="flex items-center gap-2">
                         <button aria-label="Réduire image" onclick="adjustEditorSlider('imgSize', -5)" class="w-9 h-9 bg-white border rounded">−</button>
@@ -1346,15 +1499,47 @@ function toggleStyle(target, prop) {
     render();
     renderEditor();
 }
-function uploadImg(e) {
+async function uploadImg(e) {
     const file = e.target.files[0];
+    e.target.value = '';
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-        toast("Image > 2 Mo : risque de saturer le stockage.", 'error', 4000);
+    if (!/^image\//.test(file.type)) { toast("Veuillez choisir un fichier image.", 'error', 4000); return; }
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    busy(true, "Optimisation de l'image…");
+    try {
+        let blob;
+        try { blob = await compressImageFile(file); } catch { blob = file; }
+        if (!blob) blob = file;
+        await detachCardImage(card); // libère l'ancienne image
+        if (idbAvailable) {
+            const id = uid();
+            try {
+                await imgPut(id, blob);
+                card.imageId = id;
+                const u = URL.createObjectURL(blob);
+                imgURLCache.set(id, u);
+                card.image = u;
+            } catch {
+                // Repli sans IDB : base64 persisté (avec risque de quota).
+                card.image = await blobToDataURL(blob);
+            }
+        } else {
+            card.image = await blobToDataURL(blob);
+        }
+        save(); render(); renderEditor();
+    } catch (err) {
+        console.error(err);
+        toast("Échec de l'import de l'image.", 'error', 4000);
+    } finally {
+        busy(false);
     }
-    const reader = new FileReader();
-    reader.onload = () => { updateProp('image', reader.result); renderEditor(); };
-    reader.readAsDataURL(file);
+}
+async function removeCardImage() {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    await detachCardImage(card);
+    save(); render(); renderEditor();
 }
 
 /* ============================================================
@@ -1450,10 +1635,14 @@ function cardCanvasHTML(card, { face = 'both', index = null } = {}) {
     ensureStyles(card);
     const accent = card.styleA.color || '#4f46e5';
     const textCol = card.styleTitle.color || card.styleQ.color || '#0f172a';
-    const style = `width:${CARD_W}px;height:${CARD_H}px;padding:${CARD_PAD}px;box-sizing:border-box;`
+    // Styles 100% inline → canvas auto-suffisant (fonctionne aussi dans l'iframe d'impression
+    // clonée, qui n'a pas la feuille de styles). Absolu + top/left:0 : piloté par son hôte
+    // (aperçu) ou sa cellule (export) ; la hauteur de ceux-ci suit l'aspect-ratio 320/453.
+    const style = `position:absolute;top:0;left:0;width:${CARD_W}px;height:${CARD_H}px;`
+        + `transform-origin:top left;padding:${CARD_PAD}px;box-sizing:border-box;`
         + `background:${card.bgColor};border:${settings.borderSize}px solid ${settings.borderColor};`
         + `border-radius:${settings.radius}px;display:flex;flex-direction:column;overflow:hidden;`
-        + `position:relative;--card-accent:${accent};--card-text:${textCol};`;
+        + `font-family:'Plus Jakarta Sans',sans-serif;--card-accent:${accent};--card-text:${textCol};`;
     let body;
     if (face === 'answer') body = cardAnswerFullHTML(card);
     else if (face === 'front') body = cardFrontHTML(card);
@@ -1470,17 +1659,39 @@ const CARD_FIT_H  = CARD_H - 10;                  // hauteur cible (px) avec mar
 const FILL_IDEAL  = Math.round(CARD_FIT_H * 0.82); // remplissage visé
 const FILL_MIN    = Math.round(CARD_FIT_H * 0.60); // seuil sous lequel on grossit
 
-// Mesure la hauteur réelle du contenu (recto + réponse) dans la largeur canonique.
+// Probe de mesure : MÊMES blocs/polices/gaps que le recto + réponse, mais empilés en
+// flux normal (pas de flex:1 qui s'effondrerait en hauteur auto). Donne la hauteur réelle
+// dont le contenu a besoin → l'auto-ajustement est fidèle à l'aperçu et à l'export.
+function buildProbeHTML(card) {
+    ensureStyles(card);
+    const titleText = card.title?.trim() || settings.globalTitle;
+    const accent = card.styleA.color || '#4f46e5';
+    let optionsHtml;
+    if (card.type === 'multiple') {
+        const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+        optionsHtml = lines.map((l, i) => optLineHTML(ALPHABET[i] || '•', l, accent, card.styleOptions)).join('');
+    } else {
+        optionsHtml = boolChoicesHTML(card);
+    }
+    return `
+        <div style="${cardTextStyle(card.styleTitle, 'margin-bottom:8px;line-height:1.2;')}">${escapeHtml(titleText)}</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+            ${cardImageHTML(card)}
+            <div style="${cardTextStyle(card.styleQ, 'line-height:1.3;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.question)}</div>
+            <div style="display:flex;flex-direction:column;gap:4px;padding:0 2px;">${optionsHtml}</div>
+        </div>
+        <div style="height:1px;margin:10px 28px 8px;background:#ccc;"></div>
+        <div style="${cardTextStyle(card.styleA, 'line-height:1.25;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.answer)}</div>`;
+}
+// Hauteur réelle du contenu (padding inclus), dans la largeur canonique.
 function measureContentHeight(card) {
-    const wrap = document.createElement('div');
-    wrap.style.cssText = `position:absolute;left:-99999px;top:0;width:${CARD_W}px;`;
-    wrap.innerHTML = cardCanvasHTML(card, { face: 'both' });
-    const canvas = wrap.firstChild;
-    canvas.style.height = 'auto';     // laisse le contenu s'étendre
-    canvas.style.overflow = 'visible';
-    document.body.appendChild(wrap);
-    const h = canvas.scrollHeight;
-    document.body.removeChild(wrap);
+    const probe = document.createElement('div');
+    probe.style.cssText = `position:absolute;left:-99999px;top:0;width:${CARD_W}px;`
+        + `padding:${CARD_PAD}px;box-sizing:border-box;font-family:'Plus Jakarta Sans',sans-serif;`;
+    probe.innerHTML = buildProbeHTML(card);
+    document.body.appendChild(probe);
+    const h = probe.scrollHeight;
+    document.body.removeChild(probe);
     return h;
 }
 
@@ -1718,15 +1929,35 @@ function deliveredMsg(result, label) {
     return `${label} téléchargé`;
 }
 
+// Version export d'une carte : image réintégrée en base64 → JSON autonome et portable.
+async function cardForExport(c) {
+    const out = cardForStorage(c);
+    delete out.imageId; delete out.imageURL; delete out.image;
+    if (c.imageId) {
+        const blob = await imgGet(c.imageId);
+        if (blob) out.image = await blobToDataURL(blob);
+    } else if (c.imageURL) {
+        out.image = c.imageURL;
+    } else if (typeof c.image === 'string' && c.image.startsWith('data:')) {
+        out.image = c.image; // repli sans IDB
+    }
+    return out;
+}
 async function exportJSON() {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
-    const payload = {
-        version: 2,
-        exportedAt: new Date().toISOString(),
-        settings,
-        cards
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    busy(true, "Préparation de l'export JSON…");
+    let blob;
+    try {
+        const exportCards = [];
+        for (const c of cards) exportCards.push(await cardForExport(c));
+        const payload = {
+            version: 3,
+            exportedAt: new Date().toISOString(),
+            settings,
+            cards: exportCards
+        };
+        blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    } finally { busy(false); }
     const r = await deliverBlob(blob, safeFilename('deck-educards') + '.json', 'application/json');
     toast(`${deliveredMsg(r, 'JSON')} · ${cards.length} cartes`, 'success');
 }
@@ -1741,7 +1972,11 @@ async function exportCSV() {
     let csv = '﻿' + ['Titre','Question','Type','Options','Reponse'].map(esc).join(sep) + '\r\n';
     cards.forEach(c => {
         const title = c.title?.trim() || settings.globalTitle;
-        csv += [title, c.question, c.type, (c.options || '').replace(/\n/g, ' | '), c.answer].map(esc).join(sep) + '\r\n';
+        // Pour V/F, on exporte les deux libellés personnalisés dans la colonne Options.
+        const optionsCol = c.type === 'boolean'
+            ? (() => { const b = boolLabels(c); return `${b.yes} | ${b.no}`; })()
+            : (c.options || '').replace(/\n/g, ' | ');
+        csv += [title, c.question, c.type, optionsCol, c.answer].map(esc).join(sep) + '\r\n';
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const r = await deliverBlob(blob, safeFilename('deck-educards') + '.csv', 'text/csv');
@@ -1797,10 +2032,12 @@ async function renderCardsToPrintLayout(mode = 'both') {
                 page.appendChild(ph);
                 return;
             }
-            // Le canvas canonique EST la carte imprimée (même markup que l'aperçu).
-            const wrap = document.createElement('div');
-            wrap.innerHTML = cardCanvasHTML(card, { face: side });
-            page.appendChild(wrap.firstElementChild);
+            // Cellule relative (comme l'hôte de l'aperçu) contenant le canvas absolu.
+            // Même markup que l'aperçu → parité stricte, sans transform (taille native 320×453).
+            const cell = document.createElement('div');
+            cell.style.cssText = `position:relative;width:${CELL_W}px;height:${CELL_H}px;overflow:hidden;`;
+            cell.innerHTML = cardCanvasHTML(card, { face: side });
+            page.appendChild(cell);
         });
         root.appendChild(page);
         pages.push(page);
@@ -2139,8 +2376,15 @@ async function importJSON(e) {
         const safeImported = safeSettings(newSettings);
         if (safeImported) settings = { ...settings, ...safeImported };
     }
+
+    // Déplace les images importées (base64) vers IndexedDB → pas de saturation localStorage.
+    busy(true, "Traitement des images importées…");
+    try {
+        for (const c of cards) { try { await migrateCardImage(c); } catch {} }
+    } finally { busy(false); }
     save();
     render();
+    gcImages(); // récupère les blobs des cartes remplacées
 }
 
 /* ============================================================
@@ -2524,14 +2768,18 @@ document.addEventListener('keydown', e => {
     }
 });
 
-loadState();
-render();
-if (window.lucide) lucide.createIcons();
+// Init asynchrone : le chargement hydrate les images depuis IndexedDB avant le 1er rendu.
+(async () => {
+    try { await loadState(); } catch (e) { console.error(e); }
+    render();
+    if (window.lucide) lucide.createIcons();
+    gcImages(); // nettoie les blobs orphelins des sessions précédentes
 
-// Lancement automatique du tutoriel à la 1ère visite
-if (!localStorage.getItem(TUTO_KEY)) {
-    setTimeout(startTutorial, 400);
-}
+    // Lancement automatique du tutoriel à la 1ère visite
+    let tutoDone = false;
+    try { tutoDone = !!localStorage.getItem(TUTO_KEY); } catch {}
+    if (!tutoDone) setTimeout(startTutorial, 500);
+})();
 </script>
 </body>
 </html>
