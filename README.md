@@ -33,14 +33,20 @@ Mesure le contenu réel de chaque carte sur un clone hors-écran et réduit prog
 - Navigation clavier (← → / Espace / Échap), mélange aléatoire, masquage du verso.
 - Indicateur de progression `n / total`.
 
+### Rendu unifié (parité site / aperçu / export)
+Chaque carte est dessinée dans un **canvas canonique unique** de 320 × 453 px (ratio 60 × 85 mm), en styles inline. Ce même canvas est réutilisé tel quel par l'aperçu (réduit via `transform: scale`), l'export PNG/PDF, l'impression et la mesure d'auto-ajustement. Résultat : **aucune divergence** de spacing, d'alignement ou de taille entre ce que l'on voit et ce que l'on imprime — fini les titres mal placés ou les chevauchements texte/image dans le PDF.
+
+### Vrai / Faux personnalisable
+Les deux réponses et la question d'invite sont entièrement personnalisables (ex : *Oui/Non*, *Correct/Incorrect*, *True/False*). On marque la bonne réponse d'un clic. Pris en charge dans l'aperçu, le mode étude, l'export et l'impression.
+
 ### Tutoriel
-Lancé automatiquement au premier chargement (6 étapes, spotlight + bulle). Re-lançable via le bouton « Revoir le tutoriel » ou la touche `T`.
+Lancé automatiquement au premier chargement (6 étapes). **Vrai spotlight** (le reste de la page est assombri, l'élément ciblé reste éclairé), bulle intelligemment positionnée et clampée, comportement cohérent mobile/desktop (ouverture automatique du drawer / de l'éditeur selon l'étape). Re-lançable via « Revoir le tutoriel » ou la touche `T`.
 
 ### Exports
 | Format | Détails |
 |---|---|
-| **JSON** | Schéma v2 versionné (`version`, `exportedAt`, `settings`, `cards`). Réimport compatible v1 (tableau brut). |
-| **CSV** | UTF-8 + BOM, séparateur `;` (Excel FR), échappement complet. |
+| **JSON** | Schéma v3 versionné (`version`, `exportedAt`, `settings`, `cards`). Images réintégrées en base64 → fichier autonome et portable. Réimport compatible v1/v2 (tableau brut). |
+| **CSV** | UTF-8 + BOM, séparateur `;` (Excel FR), échappement complet. Libellés V/F préservés. |
 | **PNG** | Une image par page A4, rendue offscreen à l'échelle 2× via html2canvas. |
 | **PDF** | Multi-pages A4 via jsPDF, JPEG qualité 0.92. |
 
@@ -71,9 +77,12 @@ Trois decks prêts à l'emploi (Sciences, Histoire, Vocabulaire EN) accessibles 
 
 ## Stockage et confidentialité
 
-- Tout est stocké en `localStorage` (clés `edu_pro_cards_v2`, `edu_pro_settings_v1`, `edu_pro_tutorial_done_v1`).
+- **Métadonnées** (texte, styles, libellés) en `localStorage` (clés `edu_pro_cards_v2`, `edu_pro_settings_v1`, `edu_pro_tutorial_done_v1`) — léger, des milliers de cartes tiennent largement.
+- **Images** stockées en **Blob dans IndexedDB** (base `educards_db`), pas en base64 dans `localStorage`. On peut ainsi importer des **centaines d'images** sans saturer le quota de ~5 Mo de `localStorage`.
+- À l'import, chaque image est **compressée** (redimensionnée à 1280 px max, ré-encodée en **WebP** avec repli JPEG) — les JPEG/JPG/PNG restent parfaitement pris en charge. Object-URLs mis en cache, ramasse-miettes des images orphelines au démarrage.
+- **Rétro-compatibilité** : les anciens decks dont les images étaient en base64 dans `localStorage` sont migrés automatiquement vers IndexedDB au premier chargement (ce qui libère le quota). Repli transparent sur `localStorage` si IndexedDB est indisponible (mode privé).
 - Aucune donnée n'est envoyée à un serveur. Les CDN (Tailwind, lucide, html2canvas, jsPDF, Google Fonts) sont chargés au démarrage.
-- Limite navigateur ≈ 5 Mo. Pour les decks avec beaucoup d'images, **exportez régulièrement en JSON** (un message d'alerte apparaît si le quota est saturé).
+- Pour archiver/transférer un deck, **exportez en JSON** (images incluses, fichier autonome).
 
 ---
 
@@ -137,7 +146,8 @@ Pas de build, pas de test runner. Tout vit dans `site/créateur_de_cartes.html`.
 ```
 
 ### Conventions
-- État global : `cards[]`, `settings{}`, persistance `localStorage`.
+- État global : `cards[]`, `settings{}` ; métadonnées en `localStorage`, images (Blob) en IndexedDB.
+- Rendu de carte : **une seule source de vérité**, `cardCanvasHTML()` (canvas canonique 320×453 en styles inline), partagée par aperçu / PNG / PDF / impression / mesure d'auto-ajustement.
 - Pas d'innerHTML avec données utilisateur sans `escapeHtml()` / `escapeAttr()`.
 - Toute action destructive passe par `confirmDialog()` (modal custom) + toast d'annulation.
 
