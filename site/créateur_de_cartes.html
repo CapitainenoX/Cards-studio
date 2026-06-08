@@ -224,8 +224,8 @@
         }
         #tutorial-mask.show { opacity: 1; }
         #tutorial-bubble {
-            position: fixed; width: min(360px, calc(100vw - 32px)); background: white;
-            border-radius: 16px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.35);
+            position: fixed; width: 360px; max-width: calc(100vw - 24px); box-sizing: border-box;
+            background: white; border-radius: 16px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.35);
             transition: top .35s cubic-bezier(.16,1,.3,1), left .35s cubic-bezier(.16,1,.3,1), opacity .25s ease;
             z-index: 2;
         }
@@ -1187,9 +1187,6 @@ function render() {
         if (idx < 12) cardEl.style.animationDelay = (idx * 40) + 'ms';
 
         const titleText = card.title?.trim() || settings.globalTitle;
-        // Numéro = position réelle dans le deck (pas l'index filtré par la recherche).
-        const realIdx = cards.indexOf(card);
-        const cardNum = String((realIdx >= 0 ? realIdx : idx) + 1).padStart(2, '0');
 
         // L'aperçu réutilise EXACTEMENT le canvas canonique de l'export (cardCanvasHTML),
         // simplement réduit par transform:scale (scaleCardCanvases) → parité stricte.
@@ -1210,7 +1207,7 @@ function render() {
                 </button>
             </div>
             <div role="button" tabindex="0" onclick="openEditor('${card.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEditor('${card.id}')}" class="card-scale-host cursor-pointer" style="${hostRadius}" aria-label="Éditer la carte ${escapeAttr(titleText)}">
-                ${cardCanvasHTML(card, { face: 'both', index: cardNum })}
+                ${cardCanvasHTML(card, { face: 'both' })}
                 <div class="card-edit-hint">✏ Cliquer pour éditer</div>
             </div>
         `;
@@ -1656,8 +1653,8 @@ function cardCanvasHTML(card, { face = 'both', index = null } = {}) {
    donc strictement représentatif de l'aperçu ET de l'export.
    ============================================================ */
 const CARD_FIT_H  = CARD_H - 10;                  // hauteur cible (px) avec marge de sécurité
-const FILL_IDEAL  = Math.round(CARD_FIT_H * 0.82); // remplissage visé
-const FILL_MIN    = Math.round(CARD_FIT_H * 0.60); // seuil sous lequel on grossit
+const FILL_IDEAL  = Math.round(CARD_FIT_H * 0.88); // remplissage visé (« le plus grand »)
+const FILL_MIN    = Math.round(CARD_FIT_H * 0.72); // seuil sous lequel on grossit
 
 // Probe de mesure : MÊMES blocs/polices/gaps que le recto + réponse, mais empilés en
 // flux normal (pas de flex:1 qui s'effondrerait en hauteur auto). Donne la hauteur réelle
@@ -1733,6 +1730,22 @@ function rescaleCard(card) {
     return measureContentHeight(card) <= CARD_FIT_H;
 }
 
+// Plus grand facteur d'échelle pour lequel le contenu de la carte tient encore.
+// Sert à calculer un facteur PARTAGÉ pour tout le deck (cohérence visuelle).
+function maxFactorForCard(card) {
+    ensureStyles(card);
+    const baseImgSize = card.imgSize || 100;
+    let lo = 0.30, hi = 1.70, best = lo;
+    for (let i = 0; i < 16; i++) {
+        const mid = (lo + hi) / 2;
+        applyScale(card, mid, baseImgSize);
+        if (measureContentHeight(card) <= CARD_FIT_H) { best = mid; lo = mid; }
+        else hi = mid;
+        if (hi - lo < 0.01) break;
+    }
+    return best;
+}
+
 function fxApply(fxClass, ids) {
     // Déclenche une animation visuelle sur les cartes ciblées (ou toutes si null).
     requestAnimationFrame(() => {
@@ -1778,18 +1791,39 @@ function applyTheme(key) {
     });
 }
 
+// Ajustement INTELLIGENT du deck : un facteur d'échelle UNIQUE et partagé → toutes les
+// cartes adoptent la même taille de base (cohérence visuelle, pas « une grande, les
+// autres petites »). On prend le plus grand facteur qui tient sur TOUTES les cartes.
+// Les cartes trop denses (qui forceraient tout le monde à devenir minuscule) font
+// exception et sont réduites individuellement, sans tirer le reste vers le bas.
 async function autoRescaleAll() {
     if (cards.length === 0) { toast("Aucune carte à ajuster.", 'error'); return; }
     const snapshot = JSON.parse(JSON.stringify(cards));
     busy(true, `Ajustement de ${cards.length} carte(s)…`);
     await new Promise(r => requestAnimationFrame(r));
-    let success = 0;
-    cards.forEach(c => { if (rescaleCard(c)) success++; });
+
+    // 1) Tailles d'image d'origine (avant toute mutation par la recherche de facteur).
+    const baseImgs = cards.map(c => c.imgSize || 100);
+    // 2) Facteur max individuel de chaque carte.
+    const factors = cards.map(maxFactorForCard);
+    // 3) Facteur partagé = le plus grand qui tient partout, borné pour rester lisible
+    //    (une carte extrême ne doit pas rendre tout le deck minuscule).
+    const FLOOR = 0.55, CEIL = 1.5;
+    const shared = clamp(Math.min(...factors), FLOOR, CEIL);
+    // 4) Applique le MÊME facteur à toutes → cohérence visuelle.
+    cards.forEach((c, i) => applyScale(c, shared, baseImgs[i]));
+    // 5) Exceptions : cartes encore en débordement (plus denses que le plancher) → réduites seules.
+    let exceptions = 0;
+    cards.forEach(c => { if (measureContentHeight(c) > CARD_FIT_H) { rescaleCard(c); exceptions++; } });
+
     save();
     render();
     busy(false);
     fxApply('fx-flash');
-    toast(`${success}/${cards.length} carte(s) ajustée(s)`, 'success', 5000, {
+    const msg = exceptions
+        ? `Deck ajusté · taille cohérente · ${exceptions} carte(s) dense(s) réduite(s)`
+        : `Deck ajusté · taille cohérente sur ${cards.length} carte(s)`;
+    toast(msg, 'success', 5000, {
         label: "Annuler",
         handler: () => { cards = snapshot; cards.forEach(ensureStyles); save(); render(); toast("Tailles restaurées", 'success', 1500); }
     });
@@ -2529,21 +2563,29 @@ function positionTuto(step) {
     spotEl.style.width = (r.width + pad * 2) + 'px';
     spotEl.style.height = (r.height + pad * 2) + 'px';
 
-    // Bulle : sous la cible si la place le permet, sinon au-dessus, sinon à côté.
+    const vw = window.innerWidth, vh = window.innerHeight;
     const bw = bubble.offsetWidth || 360;
     const bh = bubble.offsetHeight || 180;
     const gap = 16, margin = 12;
     let top, left;
-    if (r.bottom + gap + bh <= window.innerHeight - margin) {
-        top = r.bottom + gap;                       // dessous
-    } else if (r.top - gap - bh >= margin) {
-        top = r.top - gap - bh;                      // dessus
+
+    if (vw < 1024) {
+        // MOBILE : bulle ancrée et centrée horizontalement, du côté OPPOSÉ à la cible
+        // (jamais à côté → jamais hors écran). Plus de « vol » de la bulle.
+        left = Math.round((vw - bw) / 2);
+        const targetCenterY = r.top + r.height / 2;
+        top = targetCenterY < vh / 2
+            ? vh - bh - margin    // cible en haut → bulle en bas
+            : margin;             // cible en bas → bulle en haut
     } else {
-        top = clamp(r.top, margin, window.innerHeight - bh - margin); // à côté, aligné
+        // DESKTOP : sous la cible si possible, sinon au-dessus, sinon à côté.
+        if (r.bottom + gap + bh <= vh - margin) top = r.bottom + gap;
+        else if (r.top - gap - bh >= margin) top = r.top - gap - bh;
+        else top = clamp(r.top, margin, vh - bh - margin);
+        left = clamp(r.left, margin, vw - bw - margin);
     }
-    left = clamp(r.left, margin, window.innerWidth - bw - margin);
-    bubble.style.top = Math.round(top) + 'px';
-    bubble.style.left = Math.round(left) + 'px';
+    bubble.style.top = Math.round(clamp(top, margin, vh - bh - margin)) + 'px';
+    bubble.style.left = Math.round(clamp(left, margin, Math.max(margin, vw - bw - margin))) + 'px';
 }
 
 $('tutoNext').onclick = () => {
