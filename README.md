@@ -36,8 +36,8 @@ Mesure le contenu réel de chaque carte sur un clone hors-écran et réduit prog
 ### Rendu unifié (parité site / aperçu / export)
 Chaque carte est dessinée dans un **canvas canonique unique** de 320 × 453 px (ratio 60 × 85 mm), en styles inline. Ce même canvas est réutilisé tel quel par l'aperçu (réduit via `transform: scale`), l'export PNG/PDF, l'impression et la mesure d'auto-ajustement. Résultat : **aucune divergence** de spacing, d'alignement ou de taille entre ce que l'on voit et ce que l'on imprime — fini les titres mal placés ou les chevauchements texte/image dans le PDF.
 
-### Vrai / Faux personnalisable
-Les deux réponses et la question d'invite sont entièrement personnalisables (ex : *Oui/Non*, *Correct/Incorrect*, *True/False*). On marque la bonne réponse d'un clic. Pris en charge dans l'aperçu, le mode étude, l'export et l'impression.
+### Vrai / Faux
+Le recto affiche simplement « Vrai ou Faux ? ». Le verso est un champ **réponse libre détaillée** (ex : « Vrai — la cellule animale n'a pas de paroi »), avec ses propres styles. Pris en charge dans l'aperçu, le mode étude, l'export et l'impression.
 
 ### Tutoriel
 Lancé automatiquement au premier chargement (6 étapes). **Vrai spotlight** (le reste de la page est assombri, l'élément ciblé reste éclairé), bulle intelligemment positionnée et clampée, comportement cohérent mobile/desktop (ouverture automatique du drawer / de l'éditeur selon l'étape). Re-lançable via « Revoir le tutoriel » ou la touche `T`.

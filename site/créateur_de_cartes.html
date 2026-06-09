@@ -88,15 +88,6 @@
             background: linear-gradient(135deg, rgba(255,255,255,.55) 0%, transparent 35%, transparent 65%, rgba(0,0,0,.02) 100%);
             pointer-events: none;
         }
-        /* Numéro de carte (subtil, en haut à droite) — fait partie du canvas (donc imprimé) */
-        .card-canvas .card-index {
-            position: absolute; top: 14px; right: 18px;
-            font-size: 11px; font-weight: 700; letter-spacing: .08em;
-            color: var(--card-text, #0f172a);
-            opacity: .32;
-            font-variant-numeric: tabular-nums;
-            z-index: 2;
-        }
 
         .card-container { animation: cardIn .5s cubic-bezier(.16,1,.3,1) backwards; }
         @keyframes cardIn {
@@ -1545,8 +1536,7 @@ function cardAnswerFullHTML(card) {
 
 // LE canvas canonique : 320×453px, styles inline complets (bg/bordure/rayon).
 // face : 'both' (recto + réponse renversée) | 'front' | 'answer'.
-// index : numéro de carte à afficher (ou null).
-function cardCanvasHTML(card, { face = 'both', index = null } = {}) {
+function cardCanvasHTML(card, { face = 'both' } = {}) {
     ensureStyles(card);
     const accent = card.styleA.color || '#4f46e5';
     const textCol = card.styleTitle.color || card.styleQ.color || '#0f172a';
@@ -1562,8 +1552,7 @@ function cardCanvasHTML(card, { face = 'both', index = null } = {}) {
     if (face === 'answer') body = cardAnswerFullHTML(card);
     else if (face === 'front') body = cardFrontHTML(card);
     else body = cardFrontHTML(card) + cardAnswerInlineHTML(card);
-    const idx = index != null ? `<span class="card-index">${escapeHtml(index)}</span>` : '';
-    return `<div class="card-canvas" style="${style}">${idx}${body}</div>`;
+    return `<div class="card-canvas" style="${style}">${body}</div>`;
 }
 
 /* ============================================================
