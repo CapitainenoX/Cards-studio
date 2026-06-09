@@ -675,9 +675,6 @@ const CARD_PAD = 22;                // padding interne (px)
 const IMG_CAP = 150;                // hauteur max d'image (px) dans l'espace canonique
 const CARD_PX_PER_MM = CARD_W / 60; // 5.3333 px = 1 mm (mapping impression/PDF)
 
-// Libellés V/F par défaut (personnalisables par carte).
-const BOOL_DEFAULTS = { prompt: 'Vrai ou Faux ?', yes: 'Vrai', no: 'Faux' };
-
 const DEFAULTS = {
     styleQ: { size: 18, color: '#111827', weight: 'bold', italic: false, underline: false, align: 'center' },
     styleA: { size: 12, color: '#4f46e5', weight: 'bold', italic: false, underline: false, align: 'center' },
@@ -734,27 +731,7 @@ function ensureStyles(card) {
     const img = parseInt(card.imgSize);
     card.imgSize = Number.isFinite(img) ? Math.max(30, Math.min(200, img)) : DEFAULTS.imgSize;
     if (!card.bgColor) card.bgColor = DEFAULTS.bgColor;
-    // Libellés V/F personnalisables (rétro-compat : valeurs par défaut si absentes).
-    if (typeof card.boolPrompt !== 'string') card.boolPrompt = BOOL_DEFAULTS.prompt;
-    if (typeof card.boolTrue !== 'string' || !card.boolTrue.trim()) card.boolTrue = BOOL_DEFAULTS.yes;
-    if (typeof card.boolFalse !== 'string' || !card.boolFalse.trim()) card.boolFalse = BOOL_DEFAULTS.no;
     return card;
-}
-// Renvoie les libellés V/F effectifs d'une carte.
-function boolLabels(card) {
-    return {
-        prompt: (card.boolPrompt ?? BOOL_DEFAULTS.prompt),
-        yes: (card.boolTrue ?? BOOL_DEFAULTS.yes),
-        no: (card.boolFalse ?? BOOL_DEFAULTS.no)
-    };
-}
-// true si la réponse correcte est le libellé « vrai » de la carte.
-function boolAnswerIsYes(card) {
-    const b = boolLabels(card);
-    if (card.answer === b.yes) return true;
-    if (card.answer === b.no) return false;
-    // Repli pour anciens decks (answer === 'Vrai'/'Faux').
-    return card.answer !== 'Faux';
 }
 
 /* ============================================================
@@ -1299,16 +1276,13 @@ function renderEditor() {
                 </select>
                 ${card.type === 'multiple' ? `
                     <textarea aria-label="Options (une par ligne)" oninput="updateProp('options', this.value)" placeholder="Une option par ligne…" class="w-full border border-gray-200 p-3 rounded-lg text-xs font-mono h-28 outline-none focus:ring-2 focus:ring-indigo-100">${escapeHtml(card.options || '')}</textarea>
-                ` : boolEditorHTML(card)}
-                ${styleRow('styleOptions', card.styleOptions, card.type === 'multiple' ? 'Choix' : 'Choix V/F')}
+                ` : `
+                    <p class="text-[11px] text-gray-500">Le recto affichera « <span class="italic">Vrai ou Faux ?</span> ». Saisissez la réponse détaillée au verso ci-dessous (ex : « Vrai — la cellule animale n'a pas de paroi »).</p>
+                `}
+                ${styleRow('styleOptions', card.styleOptions, card.type === 'multiple' ? 'Choix' : 'Vrai ou Faux ?')}
             </div>
 
-            ${card.type === 'multiple' ? textBlock('Réponse', 'answer', card.answer || '', 'styleA', card.styleA, false) : `
-                <div class="space-y-3">
-                    <label class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">Style de la réponse</label>
-                    ${styleRow('styleA', card.styleA, 'Réponse')}
-                </div>
-            `}
+            ${textBlock('Réponse', 'answer', card.answer || '', 'styleA', card.styleA, card.type === 'boolean')}
 
             <div class="flex gap-2">
                 <button onclick="autoRescaleOne('${card.id}')" class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 flex items-center justify-center gap-2">
@@ -1335,61 +1309,6 @@ function renderEditor() {
             $('editorContent').scrollTop = focusSnap.scroll;
         }
     }
-}
-
-// Éditeur Vrai/Faux : invite + 2 libellés personnalisables + sélection de la bonne réponse.
-function boolEditorHTML(card) {
-    const b = boolLabels(card);
-    const yesCorrect = boolAnswerIsYes(card);
-    const correctBtn = (isYes) => {
-        const on = isYes === yesCorrect;
-        return `<button type="button" onclick="setBoolCorrect(${isYes})" aria-pressed="${on}" title="Marquer comme bonne réponse"
-            class="shrink-0 px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-1 ${on ? 'bg-emerald-600 text-white' : 'border border-gray-200 text-gray-500 hover:bg-gray-50'}">
-            <i data-lucide="check" class="w-3.5 h-3.5"></i> ${on ? 'Bonne' : 'Choisir'}
-        </button>`;
-    };
-    return `
-        <div class="space-y-2">
-            <input id="ed_boolPrompt" type="text" value="${escapeAttr(b.prompt)}" oninput="updateBoolPrompt(this.value)"
-                placeholder="Question d'invite (ex : Vrai ou Faux ?)" aria-label="Question d'invite Vrai/Faux"
-                class="w-full border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-            <div class="flex items-center gap-2">
-                <input id="ed_boolTrue" type="text" value="${escapeAttr(b.yes)}" oninput="updateBoolLabel('yes', this.value)"
-                    placeholder="Vrai" aria-label="Libellé du premier choix"
-                    class="flex-1 border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-                ${correctBtn(true)}
-            </div>
-            <div class="flex items-center gap-2">
-                <input id="ed_boolFalse" type="text" value="${escapeAttr(b.no)}" oninput="updateBoolLabel('no', this.value)"
-                    placeholder="Faux" aria-label="Libellé du second choix"
-                    class="flex-1 border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-                ${correctBtn(false)}
-            </div>
-            <p class="text-[11px] text-gray-500">Personnalisez les deux réponses (ex : Oui/Non, Correct/Incorrect) et marquez la bonne.</p>
-        </div>`;
-}
-function updateBoolPrompt(v) {
-    const card = cards.find(c => c.id === activeId);
-    if (!card) return;
-    card.boolPrompt = v;
-    save(); render();   // pas de renderEditor → frappe fluide (focus restauré par render preview seul)
-}
-function updateBoolLabel(which, v) {
-    const card = cards.find(c => c.id === activeId);
-    if (!card) return;
-    const wasYes = boolAnswerIsYes(card);
-    if (which === 'yes') card.boolTrue = v; else card.boolFalse = v;
-    // Resynchronise la réponse correcte sur le libellé renommé.
-    const b = boolLabels(card);
-    card.answer = wasYes ? b.yes : b.no;
-    save(); render();   // pas de renderEditor pendant la frappe
-}
-function setBoolCorrect(isYes) {
-    const card = cards.find(c => c.id === activeId);
-    if (!card) return;
-    const b = boolLabels(card);
-    card.answer = isYes ? b.yes : b.no;
-    save(); render(); renderEditor();
 }
 
 function textBlock(label, key, value, styleTarget, styleObj, multiline) {
@@ -1458,12 +1377,8 @@ function updateType(newType) {
     const card = cards.find(c => c.id === activeId);
     if (!card) return;
     card.type = newType;
-    if (newType === 'boolean') {
-        ensureStyles(card); // garantit boolTrue/boolFalse/boolPrompt
-        const b = boolLabels(card);
-        // Conserve la réponse si elle correspond déjà à un libellé, sinon défaut = libellé « vrai ».
-        if (card.answer !== b.yes && card.answer !== b.no) card.answer = b.yes;
-    }
+    // En Vrai/Faux, on propose « Vrai » comme réponse de départ si le champ est vide.
+    if (newType === 'boolean' && !String(card.answer || '').trim()) card.answer = 'Vrai';
     save();
     render();
     renderEditor();
@@ -1575,16 +1490,11 @@ function optLineHTML(letter, text, accent, so) {
     return `<div style="${style}">${optBadgeHTML(letter, accent)}${escapeHtml(text)}</div>`;
 }
 
-// Choix Vrai/Faux personnalisés : prompt + deux pastilles (libellés custom).
-function boolChoicesHTML(card) {
-    const b = boolLabels(card);
+// Vrai/Faux : simple invite « Vrai ou Faux ? » (la réponse détaillée est au verso).
+function boolPromptHTML(card) {
     const so = card.styleOptions;
-    const accent = card.styleA.color || '#4f46e5';
-    const pill = txt => `<span style="display:inline-block;padding:3px 14px;border-radius:999px;border:1.5px solid ${accent};`
-        + `font-size:${so.size}px;font-weight:600;color:${so.color};white-space:nowrap;">${escapeHtml(txt)}</span>`;
-    const promptStyle = `text-align:center;font-style:italic;font-size:${so.size}px;color:${so.color};letter-spacing:.02em;margin-bottom:4px;`;
-    return `<div style="${promptStyle}">${escapeHtml(b.prompt)}</div>`
-        + `<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">${pill(b.yes)}${pill(b.no)}</div>`;
+    const align = so.align === 'right' ? 'right' : (so.align === 'left' ? 'left' : 'center');
+    return `<div style="text-align:${align};font-style:italic;font-size:${so.size}px;color:${so.color};letter-spacing:.02em;">Vrai ou Faux ?</div>`;
 }
 
 // Recto (titre + image + question + options/V-F).
@@ -1597,7 +1507,7 @@ function cardFrontHTML(card) {
         const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
         optionsHtml = lines.map((l, i) => optLineHTML(ALPHABET[i] || '•', l, accent, card.styleOptions)).join('');
     } else {
-        optionsHtml = boolChoicesHTML(card);
+        optionsHtml = boolPromptHTML(card);
     }
     return `
         <div style="${cardTextStyle(card.styleTitle, 'margin-bottom:8px;line-height:1.2;letter-spacing:.01em;flex-shrink:0;')}">${escapeHtml(titleText)}</div>
@@ -1611,7 +1521,15 @@ function cardFrontHTML(card) {
 // Réponse en ligne (renversée 180° pour découpe recto/verso).
 function cardAnswerInlineHTML(card) {
     const borderC = settings.borderColor || '#e5e7eb';
-    const sep = `<div style="height:1px;margin:10px 28px 8px;background:${borderC};flex-shrink:0;"></div>`;
+    const accent = card.styleA.color || '#4f46e5';
+    // Séparateur stylé : ligne dégradée + petite pastille d'accent au centre.
+    // Le point est un VRAI élément (pas ::after) → rendu fidèle par html2canvas dans l'export.
+    const sep = `<div style="position:relative;height:1px;margin:11px 30px 9px;flex-shrink:0;`
+        + `background:linear-gradient(90deg, transparent, ${borderC} 25%, ${borderC} 75%, transparent);`
+        + `-webkit-print-color-adjust:exact;print-color-adjust:exact;">`
+        + `<div style="position:absolute;left:50%;top:50%;width:6px;height:6px;border-radius:50%;`
+        + `background:${accent};transform:translate(-50%,-50%);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>`
+        + `</div>`;
     return sep + `<div style="${cardTextStyle(card.styleA, 'transform:rotate(180deg);flex-shrink:0;line-height:1.25;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.answer)}</div>`;
 }
 
@@ -1668,7 +1586,7 @@ function buildProbeHTML(card) {
         const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
         optionsHtml = lines.map((l, i) => optLineHTML(ALPHABET[i] || '•', l, accent, card.styleOptions)).join('');
     } else {
-        optionsHtml = boolChoicesHTML(card);
+        optionsHtml = boolPromptHTML(card);
     }
     return `
         <div style="${cardTextStyle(card.styleTitle, 'margin-bottom:8px;line-height:1.2;')}">${escapeHtml(titleText)}</div>
@@ -1677,7 +1595,7 @@ function buildProbeHTML(card) {
             <div style="${cardTextStyle(card.styleQ, 'line-height:1.3;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.question)}</div>
             <div style="display:flex;flex-direction:column;gap:4px;padding:0 2px;">${optionsHtml}</div>
         </div>
-        <div style="height:1px;margin:10px 28px 8px;background:#ccc;"></div>
+        <div style="height:1px;margin:11px 30px 9px;background:#ccc;"></div>
         <div style="${cardTextStyle(card.styleA, 'line-height:1.25;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.answer)}</div>`;
 }
 // Hauteur réelle du contenu (padding inclus), dans la largeur canonique.
@@ -2006,10 +1924,7 @@ async function exportCSV() {
     let csv = '﻿' + ['Titre','Question','Type','Options','Reponse'].map(esc).join(sep) + '\r\n';
     cards.forEach(c => {
         const title = c.title?.trim() || settings.globalTitle;
-        // Pour V/F, on exporte les deux libellés personnalisés dans la colonne Options.
-        const optionsCol = c.type === 'boolean'
-            ? (() => { const b = boolLabels(c); return `${b.yes} | ${b.no}`; })()
-            : (c.options || '').replace(/\n/g, ' | ');
+        const optionsCol = c.type === 'boolean' ? 'Vrai ou Faux ?' : (c.options || '').replace(/\n/g, ' | ');
         csv += [title, c.question, c.type, optionsCol, c.answer].map(esc).join(sep) + '\r\n';
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -2302,10 +2217,6 @@ function normalizeImportedCard(raw) {
         bgColor: safeColor(raw.bgColor, DEFAULTS.bgColor),
         title: typeof raw.title === 'string' ? raw.title : '',
         imgSize,
-        // Libellés V/F personnalisés (rétro-compat : ensureStyles posera les défauts si absents).
-        boolPrompt: typeof raw.boolPrompt === 'string' ? raw.boolPrompt.slice(0, 120) : BOOL_DEFAULTS.prompt,
-        boolTrue: (typeof raw.boolTrue === 'string' && raw.boolTrue.trim()) ? raw.boolTrue.slice(0, 60) : BOOL_DEFAULTS.yes,
-        boolFalse: (typeof raw.boolFalse === 'string' && raw.boolFalse.trim()) ? raw.boolFalse.slice(0, 60) : BOOL_DEFAULTS.no,
         styleQ: safeStyle(raw.styleQ, DEFAULTS.styleQ),
         styleA: safeStyle(raw.styleA, DEFAULTS.styleA),
         styleTitle: safeStyle(raw.styleTitle, DEFAULTS.styleTitle),
@@ -2644,10 +2555,7 @@ function renderStudyCard() {
     if (card.type === 'multiple') {
         optionsHtml = lines.map((l, i) => `<div style="font-size:${Math.max(13, card.styleOptions.size + 3)}px;color:${card.styleOptions.color};text-align:left;line-height:1.4;margin:4px 0;"><b>${ALPHABET[i] || '•'})</b> ${escapeHtml(l)}</div>`).join('');
     } else {
-        const b = boolLabels(card);
-        const pill = txt => `<span style="display:inline-block;padding:5px 16px;border-radius:999px;border:1.5px solid #6366f1;font-size:15px;font-weight:600;color:#4338ca;margin:0 5px;">${escapeHtml(txt)}</span>`;
-        optionsHtml = `<div style="font-size:14px;color:#6b7280;font-style:italic;margin-bottom:10px;">${escapeHtml(b.prompt)}</div>`
-            + `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:6px;">${pill(b.yes)}${pill(b.no)}</div>`;
+        optionsHtml = `<div style="font-size:15px;color:#6b7280;font-style:italic;">Vrai ou Faux ?</div>`;
     }
     $('studyFront').innerHTML = `
         <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9ca3af;font-weight:700;">${escapeHtml(titleText)}</div>
