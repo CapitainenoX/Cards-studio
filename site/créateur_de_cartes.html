@@ -838,6 +838,7 @@ async function detachCardImage(card) {
         if (u) { URL.revokeObjectURL(u); imgURLCache.delete(card.imageId); }
         await imgDelete(card.imageId);
     }
+    if (card.image) imgDimsCache.delete(card.image); // dimensions périmées
     card.imageId = null; card.imageURL = null; card.image = null;
 }
 
@@ -1563,9 +1564,35 @@ const CARD_FIT_H  = CARD_H - 10;                  // hauteur cible (px) avec mar
 const FILL_IDEAL  = Math.round(CARD_FIT_H * 0.88); // remplissage visé (« le plus grand »)
 const FILL_MIN    = Math.round(CARD_FIT_H * 0.72); // seuil sous lequel on grossit
 
+// Cache des dimensions naturelles d'images (src → {w,h}) pour des mesures déterministes.
+const imgDimsCache = new Map();
+// Précharge les dimensions de l'image d'une carte (no-op si déjà connues / pas d'image).
+function preloadImageDims(card) {
+    const src = card.image;
+    if (!src || imgDimsCache.has(src)) return Promise.resolve();
+    return new Promise(resolve => {
+        const im = new Image();
+        im.onload = () => { imgDimsCache.set(src, { w: im.naturalWidth, h: im.naturalHeight }); resolve(); };
+        im.onerror = () => { imgDimsCache.set(src, null); resolve(); };
+        im.src = src;
+    });
+}
+// Hauteur d'affichage de l'image dans le canvas canonique, calculée depuis ses
+// dimensions naturelles (mêmes contraintes CSS : max-width imgSize%, max-height IMG_CAP).
+// Si inconnues (pas encore préchargées), on réserve IMG_CAP — conservateur : on
+// préfère une carte un peu sous-remplie à un débordement dans l'export.
+function probeImageHeight(card) {
+    if (!card.image) return 0;
+    const dims = imgDimsCache.get(card.image);
+    const availW = (CARD_W - 2 * CARD_PAD) * Math.min(card.imgSize || 100, 100) / 100;
+    if (!dims || !dims.w || !dims.h) return IMG_CAP;
+    return Math.round(dims.h * Math.min(1, availW / dims.w, IMG_CAP / dims.h));
+}
+
 // Probe de mesure : MÊMES blocs/polices/gaps que le recto + réponse, mais empilés en
-// flux normal (pas de flex:1 qui s'effondrerait en hauteur auto). Donne la hauteur réelle
-// dont le contenu a besoin → l'auto-ajustement est fidèle à l'aperçu et à l'export.
+// flux normal (pas de flex:1 qui s'effondrerait en hauteur auto). L'image est remplacée
+// par un placeholder de hauteur calculée → mesure SYNCHRONE et déterministe, même si
+// l'image n'est pas encore décodée (sinon scrollHeight la compterait à 0).
 function buildProbeHTML(card) {
     ensureStyles(card);
     const titleText = card.title?.trim() || settings.globalTitle;
@@ -1577,10 +1604,11 @@ function buildProbeHTML(card) {
     } else {
         optionsHtml = boolPromptHTML(card);
     }
+    const imgPh = card.image ? `<div style="height:${probeImageHeight(card)}px;flex:0 0 auto;"></div>` : '';
     return `
         <div style="${cardTextStyle(card.styleTitle, 'margin-bottom:8px;line-height:1.2;')}">${escapeHtml(titleText)}</div>
         <div style="display:flex;flex-direction:column;gap:12px;">
-            ${cardImageHTML(card)}
+            ${imgPh}
             <div style="${cardTextStyle(card.styleQ, 'line-height:1.3;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.question)}</div>
             <div style="display:flex;flex-direction:column;gap:4px;padding:0 2px;">${optionsHtml}</div>
         </div>
@@ -1709,6 +1737,9 @@ async function autoRescaleAll() {
     busy(true, `Ajustement de ${cards.length} carte(s)…`);
     await new Promise(r => requestAnimationFrame(r));
 
+    // 0) Précharge les dimensions des images → mesures déterministes (sinon une image
+    //    pas encore décodée serait comptée à 0 et la carte déborderait à l'export).
+    await Promise.all(cards.map(preloadImageDims));
     // 1) Tailles d'image d'origine (avant toute mutation par la recherche de facteur).
     const baseImgs = cards.map(c => c.imgSize || 100);
     // 2) Facteur max individuel de chaque carte.
@@ -1735,10 +1766,11 @@ async function autoRescaleAll() {
         handler: () => { cards = snapshot; cards.forEach(ensureStyles); save(); render(); toast("Tailles restaurées", 'success', 1500); }
     });
 }
-function autoRescaleOne(id) {
+async function autoRescaleOne(id) {
     const card = cards.find(c => c.id === id);
     if (!card) return;
     const snapshot = JSON.parse(JSON.stringify(card));
+    await preloadImageDims(card);
     const ok = rescaleCard(card);
     save();
     render();
@@ -2091,6 +2123,9 @@ async function printDeck(mode = 'both') {
         // (210mm = 793.701px ; scale = 793.701/1120 = 0.708661) via une « feuille » A4.
         doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>EduCards — impression</title>
             <style>
+                /* Même police que l'app : l'iframe a son propre document, sans elle le
+                   navigateur retomberait sur sans-serif (métriques ≠ aperçu/PDF). */
+                @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
                 @page { margin: 0; size: A4; }
                 body { margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 .page-sheet { width: 210mm; height: 297mm; overflow: hidden; page-break-after: always; break-after: page; }
