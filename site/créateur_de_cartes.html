@@ -740,7 +740,11 @@ function save() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch (e) {
-        toast("Sauvegarde impossible : quota localStorage dépassé. Exportez en JSON pour ne rien perdre.", 'error', 8000);
+        console.error('save()', e);
+        const quota = e && (e.name === 'QuotaExceededError' || e.code === 22);
+        toast(quota
+            ? "Sauvegarde impossible : quota localStorage dépassé. Exportez en JSON pour ne rien perdre."
+            : "Erreur de sauvegarde : " + (e && e.message ? e.message : e), 'error', 8000);
     }
 }
 
@@ -774,12 +778,15 @@ function confirmDialog(title, body, confirmLabel = 'Confirmer', danger = true) {
             backdrop.classList.remove('open');
             btn.onclick = null;
             $('modalCancel').onclick = null;
+            backdrop.onclick = null;
             document.removeEventListener('keydown', onKey);
             resolve(val);
         };
         const onKey = e => { if (e.key === 'Escape') close(false); };
         btn.onclick = () => close(true);
         $('modalCancel').onclick = () => close(false);
+        // Clic sur le fond = annuler (cohérent avec les autres modales)
+        backdrop.onclick = e => { if (e.target === backdrop) close(false); };
         backdrop.classList.add('open');
         document.addEventListener('keydown', onKey);
         setTimeout(() => btn.focus(), 50);
@@ -1141,19 +1148,15 @@ function renderEditor() {
                     <textarea aria-label="Options (une par ligne)" oninput="updateProp('options', this.value)" placeholder="Une option par ligne…" class="w-full border border-gray-200 p-3 rounded-lg text-xs font-mono h-28 outline-none focus:ring-2 focus:ring-indigo-100">${escapeHtml(card.options || '')}</textarea>
                 ` : `
                     <div class="flex gap-2">
-                        <button onclick="updateProp('answer', 'Vrai');renderEditor()" class="flex-1 py-2 rounded-lg text-sm font-semibold ${card.answer === 'Vrai' ? 'bg-indigo-600 text-white' : 'border border-gray-200 hover:bg-gray-50'}">Vrai</button>
-                        <button onclick="updateProp('answer', 'Faux');renderEditor()" class="flex-1 py-2 rounded-lg text-sm font-semibold ${card.answer === 'Faux' ? 'bg-indigo-600 text-white' : 'border border-gray-200 hover:bg-gray-50'}">Faux</button>
+                        <button onclick="setBoolAnswer('Vrai')" class="flex-1 py-2 rounded-lg text-sm font-semibold ${(card.answer || '').trim().toLowerCase().startsWith('vrai') ? 'bg-indigo-600 text-white' : 'border border-gray-200 hover:bg-gray-50'}">Vrai</button>
+                        <button onclick="setBoolAnswer('Faux')" class="flex-1 py-2 rounded-lg text-sm font-semibold ${(card.answer || '').trim().toLowerCase().startsWith('faux') ? 'bg-indigo-600 text-white' : 'border border-gray-200 hover:bg-gray-50'}">Faux</button>
                     </div>
+                    <p class="text-[11px] text-gray-400">Astuce : tu peux compléter la réponse ci-dessous (ex. « Faux — explication… »).</p>
                 `}
                 ${card.type === 'multiple' ? styleRow('styleOptions', card.styleOptions, 'Choix') : ''}
             </div>
 
-            ${card.type === 'multiple' ? textBlock('Réponse', 'answer', card.answer || '', 'styleA', card.styleA, false) : `
-                <div class="space-y-3">
-                    <label class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">Style de la réponse</label>
-                    ${styleRow('styleA', card.styleA, 'Réponse')}
-                </div>
-            `}
+            ${textBlock('Réponse', 'answer', card.answer || '', 'styleA', card.styleA, false)}
 
             <div class="flex gap-2">
                 <button onclick="autoRescaleOne('${card.id}')" class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 flex items-center justify-center gap-2">
@@ -1244,11 +1247,24 @@ function updateProp(key, val, doSave = true) {
     if (doSave) save();
     render();
 }
+// V/F : pose « Vrai »/« Faux » en tête de réponse sans perdre l'explication personnalisée.
+// « Faux — pas de paroi » + clic Vrai → « Vrai — pas de paroi » ; réponse vide → juste le mot.
+function setBoolAnswer(word) {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    const cur = (card.answer || '').trim();
+    const m = cur.match(/^(vrai|faux)\b(.*)$/i);
+    card.answer = m ? word + m[2] : (cur ? word + ' — ' + cur : word);
+    save();
+    render();
+    renderEditor();
+}
 function updateType(newType) {
     const card = cards.find(c => c.id === activeId);
     if (!card) return;
     card.type = newType;
-    if (newType === 'boolean' && card.answer !== 'Vrai' && card.answer !== 'Faux') card.answer = 'Vrai';
+    // V/F : on ne touche pas à une réponse personnalisée existante ; défaut seulement si vide.
+    if (newType === 'boolean' && !(card.answer || '').trim()) card.answer = 'Vrai';
     save();
     render();
     renderEditor();
@@ -1370,12 +1386,14 @@ function measureContentHeight(card) {
         background:white;box-sizing:border-box;
         font-family:'Plus Jakarta Sans',sans-serif;
     `;
-    probe.innerHTML = buildProbeHTML(card);
-    document.body.appendChild(probe);
-    // Force layout
-    const h = probe.scrollHeight;
-    document.body.removeChild(probe);
-    return h;
+    try {
+        probe.innerHTML = buildProbeHTML(card);
+        document.body.appendChild(probe);
+        // Force layout
+        return probe.scrollHeight;
+    } finally {
+        if (probe.parentNode) probe.parentNode.removeChild(probe);
+    }
 }
 
 // Baseline universel — recalibre depuis zéro pour vraiment équilibrer.
@@ -1495,6 +1513,7 @@ function autoRescaleOne(id) {
         label: "Annuler",
         handler: () => {
             const idx = cards.findIndex(c => c.id === id);
+            if (idx < 0) return; // carte supprimée entre-temps → rien à restaurer
             cards[idx] = snapshot;
             save(); render(); if (activeId === id) renderEditor();
         }
@@ -1506,7 +1525,8 @@ function autoRescaleOne(id) {
    ============================================================ */
 function safeFilename(base) {
     const d = new Date();
-    const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    // Heure incluse → pas d'écrasement quand on exporte plusieurs fois le même jour.
+    const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}h${String(d.getMinutes()).padStart(2,'0')}`;
     return `${base}-${stamp}`;
 }
 function isLikelyMobile() {
@@ -2082,16 +2102,24 @@ async function importJSON(e) {
 const tutorialSteps = [
     { title: "Bienvenue dans EduCards", body: "Un créateur de flashcards pour cours, révisions et quiz. Suivez ce tour rapide (6 étapes).", target: null },
     { title: "Cliquez sur une carte", body: "Chaque carte est cliquable : ouvrez l'éditeur pour modifier titre, question, options et réponse.", target: () => document.querySelector('.card-container .card-fixed-size') },
-    { title: "Personnalisez avec le panneau", body: "Tailles de police, couleurs, image, style gras/italique/souligné — par champ.", target: () => $('editor') },
+    // prepare : le panneau éditeur est fermé (hors écran) pendant le tour → on l'ouvre
+    // réellement sur la 1re carte pour que le spot pointe sur quelque chose de visible.
+    { title: "Personnalisez avec le panneau", body: "Tailles de police, couleurs, image, style gras/italique/souligné — par champ.", target: () => $('editor'), prepare: () => { if (cards[0]) { openEditor(cards[0].id); tutoOpenedEditor = true; return true; } return false; } },
     { title: "Auto-ajuster (pro)", body: "Trop de texte qui déborde ? Un clic ajuste automatiquement les tailles pour que tout rentre dans la carte.", target: () => document.querySelector('[data-tutorial="autoscale"]') },
     { title: "Exportez vos cartes", body: "JSON pour sauvegarder, CSV pour Excel, PNG pour partager, PDF pour imprimer/partager proprement.", target: () => document.querySelector('[data-tutorial="export"]') },
     { title: "Imprimez vos flashcards", body: "Format A4 · 9 cartes par page (3×3) · prêt à découper. La réponse s'imprime à l'envers au verso.", target: () => document.querySelector('[data-tutorial="print"]') }
 ];
 let tutoIndex = 0;
+let tutoOpenedEditor = false; // éditeur ouvert par le tour → refermé en quittant l'étape
 
 let tutoTempCardId = null;
 function startTutorial() {
     tutoIndex = 0;
+    // Carte démo orpheline d'un tour précédent interrompu → purge avant de recommencer.
+    if (tutoTempCardId) {
+        cards = cards.filter(c => c.id !== tutoTempCardId);
+        tutoTempCardId = null;
+    }
     // S'il n'y a pas de cartes, on crée une carte de DÉMO éphémère (non sauvegardée)
     // juste pour le tour — retirée à la fin pour ne pas polluer le deck de l'utilisateur.
     if (cards.length === 0) {
@@ -2119,6 +2147,7 @@ function endTutorial() {
     document.body.style.overflow = '';
     localStorage.setItem(TUTO_KEY, '1');
     document.removeEventListener('keydown', tutoKeyHandler);
+    if (tutoOpenedEditor) { closeEditor(); tutoOpenedEditor = false; }
     // Retire la carte de démo éphémère si elle n'a pas été remplacée par du contenu réel.
     if (tutoTempCardId) {
         cards = cards.filter(c => c.id !== tutoTempCardId);
@@ -2142,8 +2171,14 @@ function renderTutorialStep() {
     $('tutoPrev').style.opacity = tutoIndex === 0 ? '.5' : '1';
     $('tutoNext').textContent = tutoIndex === tutorialSteps.length - 1 ? "Terminer" : "Suivant";
 
-    const spotEl = $('tutorial-spotlight-el');
-    const mask = $('tutorial-mask');
+    // Quitte l'étape « panneau » → referme l'éditeur ouvert par le tour.
+    if (tutoOpenedEditor && !step.prepare) { closeEditor(); tutoOpenedEditor = false; }
+    // Étape avec préparation (ex: ouvrir l'éditeur) : attendre la fin de la transition
+    // du panneau (300 ms) avant de mesurer sa position.
+    if (step.prepare && step.prepare()) {
+        setTimeout(() => positionTuto(step.target ? step.target() : null), 380);
+        return;
+    }
     let targetEl = step.target ? step.target() : null;
     if (window.innerWidth < 1024 && targetEl && targetEl.closest('#sidebar')) {
         openSidebar();
@@ -2185,6 +2220,8 @@ $('tutoNext').onclick = () => {
 };
 $('tutoPrev').onclick = () => { if (tutoIndex > 0) { tutoIndex--; renderTutorialStep(); } };
 $('tutoSkip').onclick = endTutorial;
+// Clic sur le fond sombre = quitter le tour (cohérent avec les autres modales).
+$('tutorial-mask').addEventListener('click', endTutorial);
 window.addEventListener('resize', () => {
     if ($('tutorial-overlay').classList.contains('open')) renderTutorialStep();
 });
@@ -2377,6 +2414,9 @@ document.addEventListener('keydown', e => {
         return;
     }
     if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Pendant le tutoriel, les raccourcis globaux sont gelés (sinon S/N/P ouvrent
+    // d'autres vues par-dessus le tour) — le tour gère ses propres touches.
+    if ($('tutorial-overlay').classList.contains('open')) return;
     switch (e.key) {
         case 'n': case 'N': addCard(); e.preventDefault(); break;
         case '/': $('searchInput').focus(); e.preventDefault(); break;
