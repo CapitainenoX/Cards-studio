@@ -40,21 +40,17 @@
             border-radius: 6px;
         }
 
-        /* ====================================================================
-           CARTE — système de rendu CANONIQUE unifié
-           Une carte est toujours dessinée dans un « canvas » de 320×453px
-           (ratio 60×85mm). Ce même canvas, en styles inline, est réutilisé tel
-           quel pour l'aperçu (scalé via transform), l'export PNG/PDF, l'impression
-           et la mesure d'auto-ajustement → parité STRICTE site / preview / export.
-           ==================================================================== */
-        .card-scale-host {
+        /* ---- CARD (preview) ---- */
+        .card-fixed-size {
             width: 100%;
             max-width: var(--card-w);
-            aspect-ratio: 320 / 453;
-            position: relative;
-            margin: 0 auto;
-            overflow: hidden;
+            aspect-ratio: 320 / 450;
+            display: flex;
+            flex-direction: column;
             background: white;
+            position: relative;
+            padding: 22px;
+            overflow: hidden;
             isolation: isolate;
             transition: transform .35s cubic-bezier(.16,1,.3,1),
                         box-shadow .35s cubic-bezier(.16,1,.3,1);
@@ -62,40 +58,45 @@
                 0 1px 2px rgba(15,23,42,.04),
                 0 8px 24px -8px rgba(15,23,42,.08);
         }
-        .card-scale-host:hover {
+        /* Reflet diagonal subtil */
+        .card-fixed-size::before {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,.6) 0%, transparent 35%, transparent 65%, rgba(0,0,0,.02) 100%);
+            pointer-events: none; z-index: 0;
+        }
+        .card-fixed-size > * { position: relative; z-index: 1; }
+        .card-fixed-size:hover {
             transform: translateY(-6px) scale(1.015);
             box-shadow:
                 0 2px 4px rgba(15,23,42,.06),
                 0 24px 48px -16px rgba(79,70,229,.22);
         }
-        .card-scale-host:active { transform: translateY(-2px) scale(1.0); transition-duration: .12s; }
+        .card-fixed-size:active { transform: translateY(-2px) scale(1.0); transition-duration: .12s; }
 
-        /* Le canvas est dessiné à sa taille native (320×453) puis réduit par
-           transform:scale(host.width/320) appliqué en JS (scaleCardCanvases). */
-        .card-canvas {
-            position: absolute; top: 0; left: 0;
-            width: 320px; height: 453px;
-            transform-origin: top left;
-            box-sizing: border-box;
-            display: flex; flex-direction: column;
-            overflow: hidden;
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            background: white;
-        }
-        /* Reflet diagonal subtil (aperçu uniquement, via la classe sur l'hôte) */
-        .card-scale-host::after {
-            content: ''; position: absolute; inset: 0; z-index: 3;
-            background: linear-gradient(135deg, rgba(255,255,255,.55) 0%, transparent 35%, transparent 65%, rgba(0,0,0,.02) 100%);
-            pointer-events: none;
-        }
-        /* Numéro de carte (subtil, en haut à droite) — fait partie du canvas (donc imprimé) */
-        .card-canvas .card-index {
-            position: absolute; top: 14px; right: 18px;
-            font-size: 11px; font-weight: 700; letter-spacing: .08em;
+        /* Numéro de carte (subtil, en haut à droite) */
+        .card-index {
+            position: absolute; top: 10px; right: 14px;
+            font-size: 9px; font-weight: 700; letter-spacing: .08em;
+            /* Hérite de la couleur du titre (--card-text) puis applique alpha via opacity */
             color: var(--card-text, #0f172a);
-            opacity: .32;
+            opacity: .35;
             font-variant-numeric: tabular-nums;
             z-index: 2;
+        }
+
+        /* Badge lettre QCM (A B C…) : markup généré par optLineHTML/optBadgeHTML en styles
+           inline (partagés avec l'export PNG/PDF/print qui n'embarque pas cette CSS). */
+
+        /* Séparateur réponse stylé (gradient + pastille) */
+        .answer-sep {
+            height: 1px; margin: 10px 32px 8px; position: relative;
+            background: linear-gradient(90deg, transparent, var(--card-border-color, #e5e7eb) 25%, var(--card-border-color, #e5e7eb) 75%, transparent);
+        }
+        .answer-sep::after {
+            content: ''; position: absolute; left: 50%; top: 50%;
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--card-accent, #4f46e5);
+            transform: translate(-50%, -50%);
         }
 
         .card-container { animation: cardIn .5s cubic-bezier(.16,1,.3,1) backwards; }
@@ -104,7 +105,7 @@
             to { opacity: 1; transform: translateY(0) scale(1); }
         }
         /* Pulse au theme apply / rescale */
-        .card-container.fx-pulse .card-scale-host {
+        .card-container.fx-pulse .card-fixed-size {
             animation: cardPulse 1s cubic-bezier(.16,1,.3,1);
         }
         @keyframes cardPulse {
@@ -113,7 +114,7 @@
             100% { box-shadow: 0 0 0 0 rgba(79,70,229,0), 0 8px 24px -8px rgba(15,23,42,.08); }
         }
         /* fx-flash : overlay violet via box-shadow inset (préserve bgColor user/dark) */
-        .card-container.fx-flash .card-scale-host {
+        .card-container.fx-flash .card-fixed-size {
             animation: cardFlash .7s ease-out;
         }
         @keyframes cardFlash {
@@ -121,6 +122,7 @@
             100% { box-shadow: inset 0 0 0 9999px rgba(167,139,250,0),   0 1px 2px rgba(15,23,42,.04), 0 8px 24px -8px rgba(15,23,42,.08); }
         }
 
+        .upside-down { transform: rotate(180deg); display: inline-block; }
         .card-edit-hint {
             position: absolute; inset: auto 0 0 0;
             background: linear-gradient(to top, rgba(15,23,42,.7), transparent);
@@ -128,14 +130,14 @@
             padding: 20px 8px 10px; text-align: center;
             opacity: 0; transform: translateY(8px);
             transition: opacity .25s ease, transform .25s ease;
-            pointer-events: none; z-index: 4;
+            pointer-events: none; z-index: 2;
         }
-        .card-scale-host:hover .card-edit-hint { opacity: 1; transform: translateY(0); }
+        .card-fixed-size:hover .card-edit-hint { opacity: 1; transform: translateY(0); }
 
         @media (prefers-reduced-motion: reduce) {
-            .card-container, .card-scale-host, .card-edit-hint,
-            .card-container.fx-pulse .card-scale-host,
-            .card-container.fx-flash .card-scale-host {
+            .card-container, .card-fixed-size, .card-edit-hint,
+            .card-container.fx-pulse .card-fixed-size,
+            .card-container.fx-flash .card-fixed-size {
                 animation: none !important; transition: none !important;
             }
         }
@@ -209,9 +211,7 @@
         }
         .modal-backdrop.open .modal-content { transform: scale(1); }
 
-        /* ---- TUTORIAL ----
-           Spotlight RÉEL : le box-shadow géant du cadre assombrit TOUT sauf le rectangle
-           ciblé (vrai « trou » lumineux). Le mask plein écran ne sert qu'aux étapes centrées. */
+        /* ---- TUTORIAL ---- */
         #tutorial-overlay {
             position: fixed; inset: 0; z-index: 100; pointer-events: none;
             opacity: 0; transition: opacity .3s ease;
@@ -219,27 +219,24 @@
         #tutorial-overlay.open { opacity: 1; pointer-events: auto; }
         #tutorial-mask {
             position: fixed; inset: 0;
-            background: rgba(15,23,42,.72);
-            opacity: 0; transition: opacity .3s ease;
+            background: rgba(15,23,42,.7);
+            transition: clip-path .4s ease;
         }
-        #tutorial-mask.show { opacity: 1; }
         #tutorial-bubble {
-            position: fixed; width: min(360px, calc(100vw - 32px)); background: white;
+            position: fixed; max-width: 360px; background: white;
             border-radius: 16px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.35);
-            transition: top .35s cubic-bezier(.16,1,.3,1), left .35s cubic-bezier(.16,1,.3,1), opacity .25s ease;
-            z-index: 2;
+            transition: top .4s ease, left .4s ease;
         }
         .tutorial-spotlight {
-            position: fixed; border-radius: 14px;
-            box-shadow: 0 0 0 3px var(--color-primary),
-                        0 0 0 6px rgba(79,70,229,.30),
-                        0 0 0 9999px rgba(15,23,42,.72);
+            position: fixed; border: 3px solid var(--color-primary);
+            border-radius: 14px; box-shadow: 0 0 0 4px rgba(79,70,229,.25);
             pointer-events: none;
-            transition: top .4s cubic-bezier(.16,1,.3,1), left .4s cubic-bezier(.16,1,.3,1),
-                        width .4s cubic-bezier(.16,1,.3,1), height .4s cubic-bezier(.16,1,.3,1);
+            transition: top .4s ease, left .4s ease, width .4s ease, height .4s ease;
+            animation: tutoPulse 1.6s ease-in-out infinite;
         }
-        @media (prefers-reduced-motion: reduce) {
-            #tutorial-bubble, .tutorial-spotlight { transition: none !important; }
+        @keyframes tutoPulse {
+            0%, 100% { box-shadow: 0 0 0 4px rgba(79,70,229,.25); }
+            50% { box-shadow: 0 0 0 10px rgba(79,70,229,.08); }
         }
 
         /* ---- LOADER ---- */
@@ -263,15 +260,14 @@
 
         /* ---- PRINT ---- */
         @page { margin: 0; size: A4; }
-        /* Le bouton « Imprimer » passe par une iframe isolée (printDeck) qui rend les
-           pages A4 exactes. Ces règles ne servent qu'au Ctrl+P direct (repli) : le
-           canvas canonique (320px) est ramené à 60mm via scale !important (bat le
-           transform inline posé par scaleCardCanvases, qui est sans !important). */
         @media print {
             .no-print { display: none !important; }
             html, body { background: white !important; margin: 0 !important; padding: 0 !important;
                 -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            .card-fixed-size { animation: none !important; transition: none !important; transform: none !important; }
+            .card-fixed-size::before, .card-edit-hint, .card-hover-tools { display: none !important; }
+            .card-index { color: #94a3b8 !important; }
             main { margin: 0 !important; padding: 0 !important; overflow: visible !important; }
             #app-shell { display: block !important; height: auto !important; overflow: visible !important; }
             #deck {
@@ -282,19 +278,21 @@
                 padding: 8mm 0 !important;
                 width: fit-content !important;
             }
-            .card-container { break-inside: avoid !important; page-break-inside: avoid !important; animation: none !important; }
+            .card-container { break-inside: avoid !important; page-break-inside: avoid !important; }
             .card-container.page-break { break-before: page !important; page-break-before: always !important; }
-            .card-scale-host {
+            .card-fixed-size {
                 width: 60mm !important;
                 height: 85mm !important;
                 max-width: 60mm !important;
                 aspect-ratio: unset !important;
                 box-shadow: none !important;
                 margin: 0 !important;
+                padding: 3mm !important;
+                box-sizing: border-box !important;
+                overflow: hidden;
                 transform: none !important;
             }
-            .card-scale-host::after, .card-edit-hint, .card-hover-tools { display: none !important; }
-            .card-canvas { transform: scale(0.708661) !important; } /* 320px → 60mm */
+            .card-edit-hint, .card-hover-tools { display: none !important; }
         }
     </style>
 </head>
@@ -665,19 +663,6 @@ const TUTO_KEY = 'edu_pro_tutorial_done_v1';
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-/* ---- Géométrie canonique de la carte ----
-   Toute carte est dessinée dans un canvas de 320×453px (ratio 60×85mm = 0.7059).
-   Ce canvas unique est partagé par l'aperçu, l'export PNG/PDF, l'impression et la
-   mesure d'auto-ajustement. CARD_PX_PER_MM mappe ce canvas vers les millimètres. */
-const CARD_W = 320;                 // largeur canonique (px)
-const CARD_H = 453;                 // hauteur canonique (px) ≈ 320 × 85/60
-const CARD_PAD = 22;                // padding interne (px)
-const IMG_CAP = 150;                // hauteur max d'image (px) dans l'espace canonique
-const CARD_PX_PER_MM = CARD_W / 60; // 5.3333 px = 1 mm (mapping impression/PDF)
-
-// Libellés V/F par défaut (personnalisables par carte).
-const BOOL_DEFAULTS = { prompt: 'Vrai ou Faux ?', yes: 'Vrai', no: 'Faux' };
-
 const DEFAULTS = {
     styleQ: { size: 18, color: '#111827', weight: 'bold', italic: false, underline: false, align: 'center' },
     styleA: { size: 12, color: '#4f46e5', weight: 'bold', italic: false, underline: false, align: 'center' },
@@ -734,170 +719,11 @@ function ensureStyles(card) {
     const img = parseInt(card.imgSize);
     card.imgSize = Number.isFinite(img) ? Math.max(30, Math.min(200, img)) : DEFAULTS.imgSize;
     if (!card.bgColor) card.bgColor = DEFAULTS.bgColor;
-    // Libellés V/F personnalisables (rétro-compat : valeurs par défaut si absentes).
-    if (typeof card.boolPrompt !== 'string') card.boolPrompt = BOOL_DEFAULTS.prompt;
-    if (typeof card.boolTrue !== 'string' || !card.boolTrue.trim()) card.boolTrue = BOOL_DEFAULTS.yes;
-    if (typeof card.boolFalse !== 'string' || !card.boolFalse.trim()) card.boolFalse = BOOL_DEFAULTS.no;
     return card;
-}
-// Renvoie les libellés V/F effectifs d'une carte.
-function boolLabels(card) {
-    return {
-        prompt: (card.boolPrompt ?? BOOL_DEFAULTS.prompt),
-        yes: (card.boolTrue ?? BOOL_DEFAULTS.yes),
-        no: (card.boolFalse ?? BOOL_DEFAULTS.no)
-    };
-}
-// true si la réponse correcte est le libellé « vrai » de la carte.
-function boolAnswerIsYes(card) {
-    const b = boolLabels(card);
-    if (card.answer === b.yes) return true;
-    if (card.answer === b.no) return false;
-    // Repli pour anciens decks (answer === 'Vrai'/'Faux').
-    return card.answer !== 'Faux';
-}
-
-/* ============================================================
-   STOCKAGE — IndexedDB pour les images (Blob), localStorage pour
-   les métadonnées légères. Permet des centaines d'images sans saturer
-   le quota localStorage (~5 Mo). Images compressées (WebP/JPEG) à l'import.
-   Rétro-compat : migration auto des anciennes images base64. Repli localStorage
-   si IndexedDB indisponible (mode privé).
-   ============================================================ */
-const DB_NAME = 'educards_db', DB_VER = 1, IMG_STORE = 'images';
-let _dbPromise = null;
-let idbAvailable = true;
-
-function idb() {
-    if (_dbPromise) return _dbPromise;
-    _dbPromise = new Promise((resolve, reject) => {
-        if (!window.indexedDB) { idbAvailable = false; reject(new Error('no-indexeddb')); return; }
-        let req;
-        try { req = indexedDB.open(DB_NAME, DB_VER); }
-        catch (e) { idbAvailable = false; reject(e); return; }
-        req.onupgradeneeded = () => {
-            const db = req.result;
-            if (!db.objectStoreNames.contains(IMG_STORE)) db.createObjectStore(IMG_STORE, { keyPath: 'id' });
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => { idbAvailable = false; reject(req.error); };
-    });
-    return _dbPromise;
-}
-function idbReq(req) { return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
-async function imgPut(id, blob) { const db = await idb(); const st = db.transaction(IMG_STORE, 'readwrite').objectStore(IMG_STORE); await idbReq(st.put({ id, blob })); }
-async function imgGet(id) { try { const db = await idb(); const st = db.transaction(IMG_STORE, 'readonly').objectStore(IMG_STORE); const r = await idbReq(st.get(id)); return r ? r.blob : null; } catch { return null; } }
-async function imgDelete(id) { try { const db = await idb(); const st = db.transaction(IMG_STORE, 'readwrite').objectStore(IMG_STORE); await idbReq(st.delete(id)); } catch {} }
-async function imgAllIds() { try { const db = await idb(); const st = db.transaction(IMG_STORE, 'readonly').objectStore(IMG_STORE); return await idbReq(st.getAllKeys()); } catch { return []; } }
-
-// Cache d'object-URLs (imageId → blob: URL) pour éviter de recréer/fuiter des URLs.
-const imgURLCache = new Map();
-function blobToDataURL(blob) { return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); }); }
-async function dataURLToBlob(dataURL) { try { const r = await fetch(dataURL); return await r.blob(); } catch { return null; } }
-
-// Charge un fichier image en HTMLImageElement (universel, gère SVG/JPEG/PNG/WebP).
-function loadImageEl(srcURL) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('image-decode'));
-        img.src = srcURL;
-    });
-}
-function canvasToBlob(canvas, type, q) { return new Promise(res => canvas.toBlob(res, type, q)); }
-
-// Compresse/redimensionne une image (max 1280px) → Blob WebP (repli JPEG).
-// Renvoie le plus petit entre la version compressée et l'original.
-async function compressImageFile(file) {
-    const url = URL.createObjectURL(file);
-    let img;
-    try { img = await loadImageEl(url); }
-    finally { setTimeout(() => URL.revokeObjectURL(url), 2000); }
-    const MAX = 1280;
-    let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-    if (!w || !h) return file;
-    const scale = Math.min(1, MAX / Math.max(w, h));
-    w = Math.max(1, Math.round(w * scale));
-    h = Math.max(1, Math.round(h * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, w, h);
-    let blob = await canvasToBlob(canvas, 'image/webp', 0.82);
-    if (!blob || blob.type !== 'image/webp') blob = await canvasToBlob(canvas, 'image/jpeg', 0.85);
-    if (!blob) return file;
-    // Si l'original (déjà optimisé) est plus léger, on le garde.
-    return (file.size && file.size < blob.size && /^image\//.test(file.type)) ? file : blob;
-}
-
-// Résout l'image runtime (card.image) d'une carte à partir de son stockage persistant.
-// imageId (Blob IDB) > imageURL (lien externe) > image base64 hérité (migré vers IDB).
-async function migrateCardImage(card) {
-    if (card.imageId) {
-        if (imgURLCache.has(card.imageId)) { card.image = imgURLCache.get(card.imageId); return; }
-        const blob = await imgGet(card.imageId);
-        if (blob) { const u = URL.createObjectURL(blob); imgURLCache.set(card.imageId, u); card.image = u; }
-        else { card.imageId = null; card.image = null; }
-        return;
-    }
-    if (typeof card.imageURL === 'string' && card.imageURL) { card.image = card.imageURL; return; }
-    if (typeof card.image === 'string' && card.image.startsWith('data:image/')) {
-        // Image base64 héritée → on la déplace dans IndexedDB (libère localStorage).
-        const blob = await dataURLToBlob(card.image);
-        if (blob && idbAvailable) {
-            const id = uid();
-            try {
-                await imgPut(id, blob);
-                card.imageId = id;
-                const u = URL.createObjectURL(blob);
-                imgURLCache.set(id, u);
-                card.image = u;
-                return;
-            } catch { /* repli : on garde le base64 runtime + persisté */ }
-        }
-        // Repli sans IDB : on conserve le base64 tel quel.
-        return;
-    }
-    if (typeof card.image === 'string' && /^https?:\/\//i.test(card.image)) {
-        card.imageURL = card.image; return;
-    }
-}
-
-// Supprime l'image d'une carte (blob IDB + object-URL). Pas d'undo sur l'image.
-async function detachCardImage(card) {
-    if (card.imageId) {
-        const u = imgURLCache.get(card.imageId);
-        if (u) { URL.revokeObjectURL(u); imgURLCache.delete(card.imageId); }
-        await imgDelete(card.imageId);
-    }
-    card.imageId = null; card.imageURL = null; card.image = null;
-}
-
-// Ramasse-miettes : supprime les blobs IDB qui ne sont plus référencés par aucune carte.
-// Appelé au démarrage (les cartes supprimées en session restent annulables jusque-là).
-async function gcImages() {
-    if (!idbAvailable) return;
-    try {
-        const refed = new Set(cards.map(c => c.imageId).filter(Boolean));
-        const all = await imgAllIds();
-        for (const id of all) {
-            if (!refed.has(id)) {
-                await imgDelete(id);
-                const u = imgURLCache.get(id);
-                if (u) { URL.revokeObjectURL(u); imgURLCache.delete(id); }
-            }
-        }
-    } catch {}
 }
 
 /* ------------ Load / Save ------------ */
-// Version persistée d'une carte : pas d'object-URL runtime ni de base64 (sauf repli sans IDB).
-function cardForStorage(c) {
-    const { image, ...rest } = c;
-    if (!rest.imageId && typeof image === 'string' && image.startsWith('data:')) rest.image = image; // repli sans IDB
-    return rest;
-}
-async function loadState() {
+function loadState() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         cards = raw ? JSON.parse(raw) : [];
@@ -908,17 +734,17 @@ async function loadState() {
         const s = localStorage.getItem(SETTINGS_KEY);
         if (s) settings = { ...settings, ...JSON.parse(s) };
     } catch (e) {}
-    // Migration/hydratation des images (séquentiel pour ne pas saturer IDB).
-    for (const c of cards) { try { await migrateCardImage(c); } catch {} }
-    // Réécrit le stockage (sans base64 désormais déplacé dans IDB).
-    save();
 }
 function save() {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(cards.map(cardForStorage)));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch (e) {
-        toast("Sauvegarde impossible : quota dépassé. Les images sont stockées séparément ; exportez en JSON pour sécuriser vos données.", 'error', 8000);
+        console.error('save()', e);
+        const quota = e && (e.name === 'QuotaExceededError' || e.code === 22);
+        toast(quota
+            ? "Sauvegarde impossible : quota localStorage dépassé. Exportez en JSON pour ne rien perdre."
+            : "Erreur de sauvegarde : " + (e && e.message ? e.message : e), 'error', 8000);
     }
 }
 
@@ -952,12 +778,15 @@ function confirmDialog(title, body, confirmLabel = 'Confirmer', danger = true) {
             backdrop.classList.remove('open');
             btn.onclick = null;
             $('modalCancel').onclick = null;
+            backdrop.onclick = null;
             document.removeEventListener('keydown', onKey);
             resolve(val);
         };
         const onKey = e => { if (e.key === 'Escape') close(false); };
         btn.onclick = () => close(true);
         $('modalCancel').onclick = () => close(false);
+        // Clic sur le fond = annuler (cohérent avec les autres modales)
+        backdrop.onclick = e => { if (e.target === backdrop) close(false); };
         backdrop.classList.add('open');
         document.addEventListener('keydown', onKey);
         setTimeout(() => btn.focus(), 50);
@@ -1062,21 +891,11 @@ function addCard() {
     closeSidebar();
     toast("Carte ajoutée", 'success', 1500);
 }
-async function duplicateCard(id) {
+function duplicateCard(id) {
     const original = cards.find(c => c.id === id);
     if (!original) return;
-    // On part de la version « stockage » (sans object-URL runtime) puis on recopie l'image.
-    const copy = JSON.parse(JSON.stringify(cardForStorage(original)));
+    const copy = JSON.parse(JSON.stringify(original));
     copy.id = uid();
-    // L'image est copiée dans un NOUVEAU blob → chaque carte possède la sienne (suppression sûre).
-    if (original.imageId) {
-        const blob = await imgGet(original.imageId);
-        if (blob && idbAvailable) {
-            const nid = uid();
-            try { await imgPut(nid, blob); copy.imageId = nid; } catch { copy.imageId = null; }
-        } else { copy.imageId = null; }
-    }
-    await migrateCardImage(copy); // hydrate copy.image
     const idx = cards.findIndex(c => c.id === id);
     cards.splice(idx + 1, 0, copy);
     save();
@@ -1186,14 +1005,33 @@ function render() {
         // Stagger entrance animation (max 12 cartes en cascade, après on rend instantané)
         if (idx < 12) cardEl.style.animationDelay = (idx * 40) + 'ms';
 
+        const accent = card.styleA.color || '#4f46e5';
+        const textCol = card.styleTitle.color || card.styleQ.color || '#0f172a';
+        const innerStyle = `
+            border-radius: ${radius}px;
+            border: ${borderSize}px solid ${borderCol};
+            background-color: ${card.bgColor};
+            --card-accent: ${accent};
+            --card-border-color: ${borderCol};
+            --card-text: ${textCol};
+        `;
+
+        let optionsHtml = '';
+        if (card.type === 'multiple') {
+            const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+            // Markup partagé avec l'export (optLineHTML) → l'aperçu correspond exactement
+            // à la carte PNG/PDF/imprimée, badges ronds A B C D alignés à l'identique.
+            optionsHtml = lines.map((l, i) => optLineHTML(ALPHABET[i] || '•', l, accent, card.styleOptions)).join('');
+        } else {
+            // Vrai/Faux est un libellé d'instruction (pas une option) → always centered sauf si user explicit right
+            optionsHtml = `<div style="text-align:${card.styleOptions.align === 'right' ? 'right' : 'center'};font-size:${card.styleOptions.size}px;color:${card.styleOptions.color};font-style:italic;letter-spacing:.02em;">Vrai ou Faux ?</div>`;
+        }
+
         const titleText = card.title?.trim() || settings.globalTitle;
         // Numéro = position réelle dans le deck (pas l'index filtré par la recherche).
         const realIdx = cards.indexOf(card);
         const cardNum = String((realIdx >= 0 ? realIdx : idx) + 1).padStart(2, '0');
 
-        // L'aperçu réutilise EXACTEMENT le canvas canonique de l'export (cardCanvasHTML),
-        // simplement réduit par transform:scale (scaleCardCanvases) → parité stricte.
-        const hostRadius = `border-radius:${radius}px;`;
         cardEl.innerHTML = `
             <div class="card-hover-tools no-print absolute -top-3 left-1/2 -translate-x-1/2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all duration-200 translate-y-1 group-hover:translate-y-0 z-10">
                 <button aria-label="Monter" onclick="moveCard('${card.id}', 'up')" class="p-2 bg-white shadow-md rounded-full hover:text-indigo-600 hover:scale-110 transition">
@@ -1209,8 +1047,24 @@ function render() {
                     <i data-lucide="arrow-down" class="w-3.5 h-3.5"></i>
                 </button>
             </div>
-            <div role="button" tabindex="0" onclick="openEditor('${card.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEditor('${card.id}')}" class="card-scale-host cursor-pointer" style="${hostRadius}" aria-label="Éditer la carte ${escapeAttr(titleText)}">
-                ${cardCanvasHTML(card, { face: 'both', index: cardNum })}
+            <div role="button" tabindex="0" onclick="openEditor('${card.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEditor('${card.id}')}" class="card-fixed-size cursor-pointer mx-auto" style="${innerStyle}" aria-label="Éditer la carte ${escapeAttr(titleText)}">
+                <span class="card-index">${cardNum}</span>
+                <div class="w-full mb-2 leading-tight" style="text-align:${card.styleTitle.align || 'center'};font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};text-decoration:${card.styleTitle.underline ? 'underline' : 'none'};letter-spacing:.01em;">
+                    ${escapeHtml(titleText)}
+                </div>
+                <div class="flex-1 flex flex-col justify-center gap-3 overflow-hidden">
+                    ${cardImageHTML(card, 150)}
+                    <div class="leading-snug" style="text-align:${card.styleQ.align || 'center'};font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};text-decoration:${card.styleQ.underline ? 'underline' : 'none'};">
+                        ${escapeHtml(card.question)}
+                    </div>
+                    <div class="w-full flex flex-col gap-1 mt-1">${optionsHtml}</div>
+                </div>
+                <div class="answer-sep"></div>
+                <div class="mt-1">
+                    <div class="upside-down leading-snug w-full" style="text-align:${card.styleA.align || 'center'};font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};text-decoration:${card.styleA.underline ? 'underline' : 'none'};">
+                        ${escapeHtml(card.answer)}
+                    </div>
+                </div>
                 <div class="card-edit-hint">✏ Cliquer pour éditer</div>
             </div>
         `;
@@ -1218,16 +1072,6 @@ function render() {
     });
 
     if (window.lucide) lucide.createIcons();
-    scaleCardCanvases();
-}
-
-// Réduit chaque canvas canonique (320px) à la largeur réelle de son hôte.
-// Appelé après render() et sur redimensionnement (ResizeObserver sur #deck).
-function scaleCardCanvases() {
-    document.querySelectorAll('#deck .card-scale-host').forEach(host => {
-        const canvas = host.querySelector('.card-canvas');
-        if (canvas) canvas.style.transform = 'scale(' + (host.clientWidth / CARD_W) + ')';
-    });
 }
 
 /* ------------ Editor ------------ */
@@ -1281,7 +1125,7 @@ function renderEditor() {
                     </div>
                     <div class="flex items-center gap-2">
                         <input id="cardImgInput" type="file" accept="image/*" onchange="uploadImg(event)" class="text-xs w-full">
-                        ${card.image ? `<button onclick="removeCardImage()" aria-label="Supprimer l'image" class="p-1.5 border border-gray-200 rounded hover:bg-white"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+                        ${card.image ? `<button onclick="updateProp('image', null);renderEditor()" aria-label="Supprimer l'image" class="p-1.5 border border-gray-200 rounded hover:bg-white"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
                     </div>
                     <div class="flex items-center gap-2">
                         <button aria-label="Réduire image" onclick="adjustEditorSlider('imgSize', -5)" class="w-9 h-9 bg-white border rounded">−</button>
@@ -1302,16 +1146,17 @@ function renderEditor() {
                 </select>
                 ${card.type === 'multiple' ? `
                     <textarea aria-label="Options (une par ligne)" oninput="updateProp('options', this.value)" placeholder="Une option par ligne…" class="w-full border border-gray-200 p-3 rounded-lg text-xs font-mono h-28 outline-none focus:ring-2 focus:ring-indigo-100">${escapeHtml(card.options || '')}</textarea>
-                ` : boolEditorHTML(card)}
-                ${styleRow('styleOptions', card.styleOptions, card.type === 'multiple' ? 'Choix' : 'Choix V/F')}
+                ` : `
+                    <div class="flex gap-2">
+                        <button onclick="setBoolAnswer('Vrai')" class="flex-1 py-2 rounded-lg text-sm font-semibold ${(card.answer || '').trim().toLowerCase().startsWith('vrai') ? 'bg-indigo-600 text-white' : 'border border-gray-200 hover:bg-gray-50'}">Vrai</button>
+                        <button onclick="setBoolAnswer('Faux')" class="flex-1 py-2 rounded-lg text-sm font-semibold ${(card.answer || '').trim().toLowerCase().startsWith('faux') ? 'bg-indigo-600 text-white' : 'border border-gray-200 hover:bg-gray-50'}">Faux</button>
+                    </div>
+                    <p class="text-[11px] text-gray-400">Astuce : tu peux compléter la réponse ci-dessous (ex. « Faux — explication… »).</p>
+                `}
+                ${card.type === 'multiple' ? styleRow('styleOptions', card.styleOptions, 'Choix') : ''}
             </div>
 
-            ${card.type === 'multiple' ? textBlock('Réponse', 'answer', card.answer || '', 'styleA', card.styleA, false) : `
-                <div class="space-y-3">
-                    <label class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">Style de la réponse</label>
-                    ${styleRow('styleA', card.styleA, 'Réponse')}
-                </div>
-            `}
+            ${textBlock('Réponse', 'answer', card.answer || '', 'styleA', card.styleA, false)}
 
             <div class="flex gap-2">
                 <button onclick="autoRescaleOne('${card.id}')" class="flex-1 py-2.5 rounded-lg text-sm font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 flex items-center justify-center gap-2">
@@ -1338,61 +1183,6 @@ function renderEditor() {
             $('editorContent').scrollTop = focusSnap.scroll;
         }
     }
-}
-
-// Éditeur Vrai/Faux : invite + 2 libellés personnalisables + sélection de la bonne réponse.
-function boolEditorHTML(card) {
-    const b = boolLabels(card);
-    const yesCorrect = boolAnswerIsYes(card);
-    const correctBtn = (isYes) => {
-        const on = isYes === yesCorrect;
-        return `<button type="button" onclick="setBoolCorrect(${isYes})" aria-pressed="${on}" title="Marquer comme bonne réponse"
-            class="shrink-0 px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-1 ${on ? 'bg-emerald-600 text-white' : 'border border-gray-200 text-gray-500 hover:bg-gray-50'}">
-            <i data-lucide="check" class="w-3.5 h-3.5"></i> ${on ? 'Bonne' : 'Choisir'}
-        </button>`;
-    };
-    return `
-        <div class="space-y-2">
-            <input id="ed_boolPrompt" type="text" value="${escapeAttr(b.prompt)}" oninput="updateBoolPrompt(this.value)"
-                placeholder="Question d'invite (ex : Vrai ou Faux ?)" aria-label="Question d'invite Vrai/Faux"
-                class="w-full border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-            <div class="flex items-center gap-2">
-                <input id="ed_boolTrue" type="text" value="${escapeAttr(b.yes)}" oninput="updateBoolLabel('yes', this.value)"
-                    placeholder="Vrai" aria-label="Libellé du premier choix"
-                    class="flex-1 border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-                ${correctBtn(true)}
-            </div>
-            <div class="flex items-center gap-2">
-                <input id="ed_boolFalse" type="text" value="${escapeAttr(b.no)}" oninput="updateBoolLabel('no', this.value)"
-                    placeholder="Faux" aria-label="Libellé du second choix"
-                    class="flex-1 border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-                ${correctBtn(false)}
-            </div>
-            <p class="text-[11px] text-gray-500">Personnalisez les deux réponses (ex : Oui/Non, Correct/Incorrect) et marquez la bonne.</p>
-        </div>`;
-}
-function updateBoolPrompt(v) {
-    const card = cards.find(c => c.id === activeId);
-    if (!card) return;
-    card.boolPrompt = v;
-    save(); render();   // pas de renderEditor → frappe fluide (focus restauré par render preview seul)
-}
-function updateBoolLabel(which, v) {
-    const card = cards.find(c => c.id === activeId);
-    if (!card) return;
-    const wasYes = boolAnswerIsYes(card);
-    if (which === 'yes') card.boolTrue = v; else card.boolFalse = v;
-    // Resynchronise la réponse correcte sur le libellé renommé.
-    const b = boolLabels(card);
-    card.answer = wasYes ? b.yes : b.no;
-    save(); render();   // pas de renderEditor pendant la frappe
-}
-function setBoolCorrect(isYes) {
-    const card = cards.find(c => c.id === activeId);
-    if (!card) return;
-    const b = boolLabels(card);
-    card.answer = isYes ? b.yes : b.no;
-    save(); render(); renderEditor();
 }
 
 function textBlock(label, key, value, styleTarget, styleObj, multiline) {
@@ -1457,16 +1247,24 @@ function updateProp(key, val, doSave = true) {
     if (doSave) save();
     render();
 }
+// V/F : pose « Vrai »/« Faux » en tête de réponse sans perdre l'explication personnalisée.
+// « Faux — pas de paroi » + clic Vrai → « Vrai — pas de paroi » ; réponse vide → juste le mot.
+function setBoolAnswer(word) {
+    const card = cards.find(c => c.id === activeId);
+    if (!card) return;
+    const cur = (card.answer || '').trim();
+    const m = cur.match(/^(vrai|faux)\b(.*)$/i);
+    card.answer = m ? word + m[2] : (cur ? word + ' — ' + cur : word);
+    save();
+    render();
+    renderEditor();
+}
 function updateType(newType) {
     const card = cards.find(c => c.id === activeId);
     if (!card) return;
     card.type = newType;
-    if (newType === 'boolean') {
-        ensureStyles(card); // garantit boolTrue/boolFalse/boolPrompt
-        const b = boolLabels(card);
-        // Conserve la réponse si elle correspond déjà à un libellé, sinon défaut = libellé « vrai ».
-        if (card.answer !== b.yes && card.answer !== b.no) card.answer = b.yes;
-    }
+    // V/F : on ne touche pas à une réponse personnalisée existante ; défaut seulement si vide.
+    if (newType === 'boolean' && !(card.answer || '').trim()) card.answer = 'Vrai';
     save();
     render();
     renderEditor();
@@ -1499,65 +1297,39 @@ function toggleStyle(target, prop) {
     render();
     renderEditor();
 }
-async function uploadImg(e) {
+function uploadImg(e) {
     const file = e.target.files[0];
-    e.target.value = '';
     if (!file) return;
-    if (!/^image\//.test(file.type)) { toast("Veuillez choisir un fichier image.", 'error', 4000); return; }
-    const card = cards.find(c => c.id === activeId);
-    if (!card) return;
-    busy(true, "Optimisation de l'image…");
-    try {
-        let blob;
-        try { blob = await compressImageFile(file); } catch { blob = file; }
-        if (!blob) blob = file;
-        await detachCardImage(card); // libère l'ancienne image
-        if (idbAvailable) {
-            const id = uid();
-            try {
-                await imgPut(id, blob);
-                card.imageId = id;
-                const u = URL.createObjectURL(blob);
-                imgURLCache.set(id, u);
-                card.image = u;
-            } catch {
-                // Repli sans IDB : base64 persisté (avec risque de quota).
-                card.image = await blobToDataURL(blob);
-            }
-        } else {
-            card.image = await blobToDataURL(blob);
-        }
-        save(); render(); renderEditor();
-    } catch (err) {
-        console.error(err);
-        toast("Échec de l'import de l'image.", 'error', 4000);
-    } finally {
-        busy(false);
+    if (file.size > 2 * 1024 * 1024) {
+        toast("Image > 2 Mo : risque de saturer le stockage.", 'error', 4000);
     }
-}
-async function removeCardImage() {
-    const card = cards.find(c => c.id === activeId);
-    if (!card) return;
-    await detachCardImage(card);
-    save(); render(); renderEditor();
+    const reader = new FileReader();
+    reader.onload = () => { updateProp('image', reader.result); renderEditor(); };
+    reader.readAsDataURL(file);
 }
 
 /* ============================================================
-   RENDU CANONIQUE DE CARTE (source de vérité unique)
-   Tous les rendus (aperçu, PNG, PDF, impression, mesure d'auto-
-   ajustement) passent par cardCanvasHTML() → parité stricte.
+   AUTO-RESCALE PRO
+   Algorithme binary-search : trouve un facteur d'échelle qui
+   remplit 85-95% de la carte (équilibré, ni overflow ni vide).
    ============================================================ */
+// Probe en dimensions PRINT (60×85mm) — pas preview — sinon texte qui fit la preview
+// déborde quand exporté en PDF/PNG (largeur réduite = plus de word-wrap = plus de hauteur).
+// Cible un remplissage modéré (~50-65%) pour laisser de la respiration aux cartes courtes.
+const CARD_TARGET_W = 226; // 60mm @ 96dpi
+const CARD_TARGET_H = 305; // 85mm @ 96dpi minus 5% safety margin
+const FILL_MIN = 150;   // ~49% rempli (seuil sous lequel on grossit)
+const FILL_IDEAL = 200; // ~66% — la cible visuelle
+const IMG_MAX_PX = 122; // image max ~40% de la hauteur print
+
 function clamp(v, mn, mx) { return Math.max(mn, Math.min(mx, v)); }
 
-// Bloc de styles texte commun (titre/question/réponse).
-function cardTextStyle(s, extra = '') {
-    return `text-align:${s.align || 'center'};font-size:${s.size}px;color:${s.color};`
-        + `font-weight:${s.weight === 'bold' ? '700' : '400'};font-style:${s.italic ? 'italic' : 'normal'};`
-        + `text-decoration:${s.underline ? 'underline' : 'none'};${extra}`;
-}
-
-// Image plafonnée en hauteur (px canonique) — jamais > 100% de large → aucun débordement.
-function cardImageHTML(card, maxHpx = IMG_CAP) {
+// Image de carte plafonnée pour ne JAMAIS casser la mise en page. Avant, max-height était en %
+// (ignoré : le conteneur direct de l'<img> a une hauteur auto) → une image portrait s'affichait
+// en pleine hauteur et chassait titre/question/options. On plafonne désormais en PX (fiable
+// partout : aperçu/export/print). maxHpx = hauteur max selon le contexte ; imgSize réduit la
+// largeur (jamais au-delà de 100 % de la carte → pas de débordement horizontal).
+function cardImageHTML(card, maxHpx) {
     if (!card.image) return '';
     const w = Math.min(card.imgSize || 100, 100);
     return `<div style="flex:0 1 auto;min-height:0;text-align:center;line-height:0;overflow:hidden;">`
@@ -1565,172 +1337,106 @@ function cardImageHTML(card, maxHpx = IMG_CAP) {
         + `</div>`;
 }
 
-// Préfixe lettre QCM « A) » « B) »… — texte pur (rendu fidèle par html2canvas).
+// Préfixe lettre QCM « A) » « B) »… — remplace l'ancien badge rond. Simple texte en gras,
+// coloré à l'accent. Étant du texte pur, il est rendu fidèlement par html2canvas (export
+// PDF/PNG/impression) et identique à l'aperçu. Markup unique partagé aperçu/probe/export.
 function optBadgeHTML(letter, accent) {
     const L = escapeHtml(letter);
+    // Pas de « ) » après la puce de repli « • » (>26 options).
     const label = letter === '•' ? L : `${L})`;
     return `<span style="font-weight:700;color:${accent};margin-right:5px;">${label}</span>`;
 }
 
-// Ligne d'option QCM (préfixe + texte) — flux normal → identique navigateur/html2canvas.
+// Ligne d'option QCM (préfixe « A) » + texte) — markup unique partagé aperçu/probe/export.
+// Texte en flux normal (pas de flex/table) → rendu identique navigateur et html2canvas.
 function optLineHTML(letter, text, accent, so) {
-    const style = cardTextStyle(so, 'line-height:1.35;padding:0 2px;word-wrap:break-word;overflow-wrap:break-word;');
+    const align = so.align || 'left';
+    const style = `text-align:${align};font-size:${so.size}px;color:${so.color};`
+        + `font-weight:${so.weight === 'bold' ? '700' : '400'};font-style:${so.italic ? 'italic' : 'normal'};`
+        + `text-decoration:${so.underline ? 'underline' : 'none'};line-height:1.35;padding:0 2px;`
+        + `word-wrap:break-word;overflow-wrap:break-word;`;
     return `<div style="${style}">${optBadgeHTML(letter, accent)}${escapeHtml(text)}</div>`;
 }
 
-// Choix Vrai/Faux personnalisés : prompt + deux pastilles (libellés custom).
-function boolChoicesHTML(card) {
-    const b = boolLabels(card);
-    const so = card.styleOptions;
-    const accent = card.styleA.color || '#4f46e5';
-    const pill = txt => `<span style="display:inline-block;padding:3px 14px;border-radius:999px;border:1.5px solid ${accent};`
-        + `font-size:${so.size}px;font-weight:600;color:${so.color};white-space:nowrap;">${escapeHtml(txt)}</span>`;
-    const promptStyle = `text-align:center;font-style:italic;font-size:${so.size}px;color:${so.color};letter-spacing:.02em;margin-bottom:4px;`;
-    return `<div style="${promptStyle}">${escapeHtml(b.prompt)}</div>`
-        + `<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">${pill(b.yes)}${pill(b.no)}</div>`;
-}
-
-// Recto (titre + image + question + options/V-F).
-function cardFrontHTML(card) {
-    ensureStyles(card);
-    const titleText = card.title?.trim() || settings.globalTitle;
-    const accent = card.styleA.color || '#4f46e5';
-    let optionsHtml;
-    if (card.type === 'multiple') {
-        const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
-        optionsHtml = lines.map((l, i) => optLineHTML(ALPHABET[i] || '•', l, accent, card.styleOptions)).join('');
-    } else {
-        optionsHtml = boolChoicesHTML(card);
-    }
-    return `
-        <div style="${cardTextStyle(card.styleTitle, 'margin-bottom:8px;line-height:1.2;letter-spacing:.01em;flex-shrink:0;')}">${escapeHtml(titleText)}</div>
-        <div style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:12px;overflow:hidden;">
-            ${cardImageHTML(card)}
-            <div style="${cardTextStyle(card.styleQ, 'line-height:1.3;flex-shrink:0;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.question)}</div>
-            <div style="display:flex;flex-direction:column;gap:4px;width:100%;padding:0 2px;">${optionsHtml}</div>
-        </div>`;
-}
-
-// Réponse en ligne (renversée 180° pour découpe recto/verso).
-function cardAnswerInlineHTML(card) {
-    const borderC = settings.borderColor || '#e5e7eb';
-    const sep = `<div style="height:1px;margin:10px 28px 8px;background:${borderC};flex-shrink:0;"></div>`;
-    return sep + `<div style="${cardTextStyle(card.styleA, 'transform:rotate(180deg);flex-shrink:0;line-height:1.25;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.answer)}</div>`;
-}
-
-// Réponse pleine page (mode duplex / verso séparé).
-function cardAnswerFullHTML(card) {
-    const titleText = card.title?.trim() || settings.globalTitle;
-    return `<div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;overflow:hidden;">
-        <div style="font-size:11px;color:#9ca3af;letter-spacing:.1em;text-transform:uppercase;font-weight:700;flex-shrink:0;">Réponse</div>
-        <div style="font-size:${Math.max(16, card.styleA.size + 4)}px;color:${card.styleA.color};font-weight:700;line-height:1.3;word-wrap:break-word;overflow-wrap:break-word;">${escapeHtml(card.answer)}</div>
-        <div style="font-size:11px;color:#9ca3af;margin-top:8px;">${escapeHtml(titleText)}</div>
-    </div>`;
-}
-
-// LE canvas canonique : 320×453px, styles inline complets (bg/bordure/rayon).
-// face : 'both' (recto + réponse renversée) | 'front' | 'answer'.
-// index : numéro de carte à afficher (ou null).
-function cardCanvasHTML(card, { face = 'both', index = null } = {}) {
-    ensureStyles(card);
-    const accent = card.styleA.color || '#4f46e5';
-    const textCol = card.styleTitle.color || card.styleQ.color || '#0f172a';
-    // Styles 100% inline → canvas auto-suffisant (fonctionne aussi dans l'iframe d'impression
-    // clonée, qui n'a pas la feuille de styles). Absolu + top/left:0 : piloté par son hôte
-    // (aperçu) ou sa cellule (export) ; la hauteur de ceux-ci suit l'aspect-ratio 320/453.
-    const style = `position:absolute;top:0;left:0;width:${CARD_W}px;height:${CARD_H}px;`
-        + `transform-origin:top left;padding:${CARD_PAD}px;box-sizing:border-box;`
-        + `background:${card.bgColor};border:${settings.borderSize}px solid ${settings.borderColor};`
-        + `border-radius:${settings.radius}px;display:flex;flex-direction:column;overflow:hidden;`
-        + `font-family:'Plus Jakarta Sans',sans-serif;--card-accent:${accent};--card-text:${textCol};`;
-    let body;
-    if (face === 'answer') body = cardAnswerFullHTML(card);
-    else if (face === 'front') body = cardFrontHTML(card);
-    else body = cardFrontHTML(card) + cardAnswerInlineHTML(card);
-    const idx = index != null ? `<span class="card-index">${escapeHtml(index)}</span>` : '';
-    return `<div class="card-canvas" style="${style}">${idx}${body}</div>`;
-}
-
-/* ============================================================
-   AUTO-RESCALE PRO — mesure sur le canvas canonique (320 px)
-   donc strictement représentatif de l'aperçu ET de l'export.
-   ============================================================ */
-const CARD_FIT_H  = CARD_H - 10;                  // hauteur cible (px) avec marge de sécurité
-const FILL_IDEAL  = Math.round(CARD_FIT_H * 0.82); // remplissage visé
-const FILL_MIN    = Math.round(CARD_FIT_H * 0.60); // seuil sous lequel on grossit
-
-// Probe de mesure : MÊMES blocs/polices/gaps que le recto + réponse, mais empilés en
-// flux normal (pas de flex:1 qui s'effondrerait en hauteur auto). Donne la hauteur réelle
-// dont le contenu a besoin → l'auto-ajustement est fidèle à l'aperçu et à l'export.
 function buildProbeHTML(card) {
     ensureStyles(card);
     const titleText = card.title?.trim() || settings.globalTitle;
     const accent = card.styleA.color || '#4f46e5';
-    let optionsHtml;
-    if (card.type === 'multiple') {
-        const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
-        optionsHtml = lines.map((l, i) => optLineHTML(ALPHABET[i] || '•', l, accent, card.styleOptions)).join('');
-    } else {
-        optionsHtml = boolChoicesHTML(card);
-    }
+    const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+    // Markup identique à buildCardHTML (optLineHTML) → la hauteur mesurée colle à l'export.
+    const optionsHtml = card.type === 'multiple'
+        ? lines.map((l, i) => optLineHTML(ALPHABET[i] || '•', l, accent, card.styleOptions)).join('')
+        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${card.styleOptions.align === 'right' ? 'right' : 'center'};color:${card.styleOptions.color};">Vrai ou Faux ?</div>`;
     return `
-        <div style="${cardTextStyle(card.styleTitle, 'margin-bottom:8px;line-height:1.2;')}">${escapeHtml(titleText)}</div>
-        <div style="display:flex;flex-direction:column;gap:12px;">
-            ${cardImageHTML(card)}
-            <div style="${cardTextStyle(card.styleQ, 'line-height:1.3;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.question)}</div>
-            <div style="display:flex;flex-direction:column;gap:4px;padding:0 2px;">${optionsHtml}</div>
-        </div>
-        <div style="height:1px;margin:10px 28px 8px;background:#ccc;"></div>
-        <div style="${cardTextStyle(card.styleA, 'line-height:1.25;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.answer)}</div>`;
-}
-// Hauteur réelle du contenu (padding inclus), dans la largeur canonique.
-function measureContentHeight(card) {
-    const probe = document.createElement('div');
-    probe.style.cssText = `position:absolute;left:-99999px;top:0;width:${CARD_W}px;`
-        + `padding:${CARD_PAD}px;box-sizing:border-box;font-family:'Plus Jakarta Sans',sans-serif;`;
-    probe.innerHTML = buildProbeHTML(card);
-    document.body.appendChild(probe);
-    const h = probe.scrollHeight;
-    document.body.removeChild(probe);
-    return h;
+        <div style="text-align:${card.styleTitle.align || 'center'};font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};line-height:1.2;">${escapeHtml(titleText)}</div>
+        ${cardImageHTML(card, IMG_MAX_PX)}
+        <div style="text-align:${card.styleQ.align || 'center'};font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};line-height:1.3;">${escapeHtml(card.question)}</div>
+        <div style="display:flex;flex-direction:column;gap:2px;">${optionsHtml}</div>
+        <div style="text-align:${card.styleA.align || 'center'};padding-top:8px;margin-top:auto;border-top:1px solid #eee;font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};">${escapeHtml(card.answer)}</div>
+    `;
 }
 
-// Recalibre toutes les tailles depuis un baseline commun × facteur.
+function measureContentHeight(card) {
+    const probe = document.createElement('div');
+    // Padding 3mm × 2 ≈ 11.3px chaque côté, identique au print (renderCardsToPrintLayout)
+    probe.style.cssText = `
+        position:absolute;left:-99999px;top:0;
+        width:${CARD_TARGET_W}px;
+        padding:12px;display:flex;flex-direction:column;gap:5px;
+        background:white;box-sizing:border-box;
+        font-family:'Plus Jakarta Sans',sans-serif;
+    `;
+    try {
+        probe.innerHTML = buildProbeHTML(card);
+        document.body.appendChild(probe);
+        // Force layout
+        return probe.scrollHeight;
+    } finally {
+        if (probe.parentNode) probe.parentNode.removeChild(probe);
+    }
+}
+
+// Baseline universel — recalibre depuis zéro pour vraiment équilibrer.
+// imgSize : respecte la préférence user, ne rétrécit qu'en cas d'overflow (factor<1).
 function applyScale(card, factor, baseImgSize) {
-    card.styleQ.size       = clamp(Math.round(18 * factor), 8, 40);
-    card.styleOptions.size = clamp(Math.round(12 * factor), 8, 28);
-    card.styleTitle.size   = clamp(Math.round(16 * factor), 8, 30);
-    card.styleA.size       = clamp(Math.round(13 * factor), 8, 26);
+    card.styleQ.size       = clamp(Math.round(18 * factor), 8, 38);
+    card.styleOptions.size = clamp(Math.round(12 * factor), 8, 26);
+    card.styleTitle.size   = clamp(Math.round(14 * factor), 8, 26);
+    card.styleA.size       = clamp(Math.round(13 * factor), 8, 24);
     if (card.image) {
         card.imgSize = factor < 1
-            ? clamp(Math.round(baseImgSize * Math.sqrt(factor)), 40, baseImgSize)
-            : baseImgSize;
+            ? clamp(Math.round(baseImgSize * Math.sqrt(factor)), 40, baseImgSize) // shrink
+            : baseImgSize;                                                         // jamais agrandir
     }
 }
 
 function rescaleCard(card) {
     ensureStyles(card);
+    // Snapshot avant binary search : permet de revenir si tout overflow
     const baseImgSize = card.imgSize || 100;
-    let lo = 0.30, hi = 1.70;
+    // hi modéré (1.55) : empêche les cartes courtes d'exploser en taille géante.
+    let lo = 0.30, hi = 1.55;
+    // best initialisé sur lo (pas 1) pour garantir au moins UN changement quand jamais ≤ TARGET
     let best = { factor: lo, dist: Infinity, h: Infinity };
 
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 16; i++) {
         const mid = (lo + hi) / 2;
         applyScale(card, mid, baseImgSize);
         const h = measureContentHeight(card);
-        if (h > CARD_FIT_H) {
-            hi = mid;
-            if (best.h === Infinity && mid < best.factor) best = { factor: mid, dist: h - CARD_FIT_H, h };
+        if (h > CARD_TARGET_H) {
+            hi = mid; // trop grand → réduire
+            // Si on n'a jamais trouvé de fit, on garde le facteur le plus bas tenté
+            if (best.h === Infinity && mid < best.factor) best = { factor: mid, dist: h - CARD_TARGET_H, h };
         } else {
             const dist = Math.abs(FILL_IDEAL - h);
             if (best.h === Infinity || dist < best.dist) best = { factor: mid, dist, h };
-            if (h < FILL_MIN) lo = mid;
-            else break;
+            if (h < FILL_MIN) lo = mid; // sous-rempli → agrandir
+            else break;                  // dans la zone idéale → stop
         }
-        if (hi - lo < 0.01) break;
+        if (hi - lo < 0.01) break; // convergence atteinte → inutile de continuer
     }
     applyScale(card, best.factor, baseImgSize);
-    return measureContentHeight(card) <= CARD_FIT_H;
+    return measureContentHeight(card) <= CARD_TARGET_H;
 }
 
 function fxApply(fxClass, ids) {
@@ -1807,6 +1513,7 @@ function autoRescaleOne(id) {
         label: "Annuler",
         handler: () => {
             const idx = cards.findIndex(c => c.id === id);
+            if (idx < 0) return; // carte supprimée entre-temps → rien à restaurer
             cards[idx] = snapshot;
             save(); render(); if (activeId === id) renderEditor();
         }
@@ -1818,7 +1525,8 @@ function autoRescaleOne(id) {
    ============================================================ */
 function safeFilename(base) {
     const d = new Date();
-    const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    // Heure incluse → pas d'écrasement quand on exporte plusieurs fois le même jour.
+    const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}h${String(d.getMinutes()).padStart(2,'0')}`;
     return `${base}-${stamp}`;
 }
 function isLikelyMobile() {
@@ -1929,35 +1637,15 @@ function deliveredMsg(result, label) {
     return `${label} téléchargé`;
 }
 
-// Version export d'une carte : image réintégrée en base64 → JSON autonome et portable.
-async function cardForExport(c) {
-    const out = cardForStorage(c);
-    delete out.imageId; delete out.imageURL; delete out.image;
-    if (c.imageId) {
-        const blob = await imgGet(c.imageId);
-        if (blob) out.image = await blobToDataURL(blob);
-    } else if (c.imageURL) {
-        out.image = c.imageURL;
-    } else if (typeof c.image === 'string' && c.image.startsWith('data:')) {
-        out.image = c.image; // repli sans IDB
-    }
-    return out;
-}
 async function exportJSON() {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
-    busy(true, "Préparation de l'export JSON…");
-    let blob;
-    try {
-        const exportCards = [];
-        for (const c of cards) exportCards.push(await cardForExport(c));
-        const payload = {
-            version: 3,
-            exportedAt: new Date().toISOString(),
-            settings,
-            cards: exportCards
-        };
-        blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    } finally { busy(false); }
+    const payload = {
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        settings,
+        cards
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const r = await deliverBlob(blob, safeFilename('deck-educards') + '.json', 'application/json');
     toast(`${deliveredMsg(r, 'JSON')} · ${cards.length} cartes`, 'success');
 }
@@ -1972,26 +1660,60 @@ async function exportCSV() {
     let csv = '﻿' + ['Titre','Question','Type','Options','Reponse'].map(esc).join(sep) + '\r\n';
     cards.forEach(c => {
         const title = c.title?.trim() || settings.globalTitle;
-        // Pour V/F, on exporte les deux libellés personnalisés dans la colonne Options.
-        const optionsCol = c.type === 'boolean'
-            ? (() => { const b = boolLabels(c); return `${b.yes} | ${b.no}`; })()
-            : (c.options || '').replace(/\n/g, ' | ');
-        csv += [title, c.question, c.type, optionsCol, c.answer].map(esc).join(sep) + '\r\n';
+        csv += [title, c.question, c.type, (c.options || '').replace(/\n/g, ' | '), c.answer].map(esc).join(sep) + '\r\n';
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const r = await deliverBlob(blob, safeFilename('deck-educards') + '.csv', 'text/csv');
     toast(`${deliveredMsg(r, 'CSV')} · ${cards.length} cartes`, 'success');
 }
 
-// Construit les pages A4 en COORDONNÉES CANONIQUES (1 mm = CARD_PX_PER_MM px), où
-// chaque carte est le canvas canonique 320×453 EXACT de l'aperçu. La page conserve
-// le ratio A4 (1120×1584 px) → jsPDF/impression la mettent à l'échelle sans déformer.
+function buildCardHTML(card, { side = 'both' } = {}) {
+    ensureStyles(card);
+    const titleText = card.title?.trim() || settings.globalTitle;
+    const accent = card.styleA.color || '#4f46e5';
+    const borderC = settings.borderColor || '#e5e7eb';
+    const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
+    const optAlign = card.styleOptions.align || 'left';
+    // Badge cercle + texte via optLineHTML : markup partagé avec l'aperçu et le probe
+    // auto-rescale → rond aligné sur la 1re ligne, aperçu == export (zéro décalage).
+    const optionsHtml = card.type === 'multiple'
+        ? lines.map((l, i) => optLineHTML(ALPHABET[i] || '•', l, accent, card.styleOptions)).join('')
+        : `<div style="font-size:${card.styleOptions.size}px;font-style:italic;text-align:${optAlign === 'right' ? 'right' : 'center'};color:${card.styleOptions.color};letter-spacing:.02em;">Vrai ou Faux ?</div>`;
+
+    // Séparateur simple : border-top + pastille via background-image (html2canvas-safe)
+    const sep = `<div style="height:8px;margin:4px 18px 2px;border-top:1px solid ${borderC};position:relative;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>`;
+
+    const front = `
+        <div style="text-align:${card.styleTitle.align || 'center'};margin-bottom:3px;font-size:${card.styleTitle.size}px;color:${card.styleTitle.color};font-weight:${card.styleTitle.weight === 'bold' ? '700' : '400'};font-style:${card.styleTitle.italic ? 'italic' : 'normal'};line-height:1.2;letter-spacing:.01em;flex-shrink:0;">${escapeHtml(titleText)}</div>
+        <div style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:4px;overflow:hidden;">
+            ${cardImageHTML(card, IMG_MAX_PX)}
+            <div style="text-align:${card.styleQ.align || 'center'};font-size:${card.styleQ.size}px;color:${card.styleQ.color};font-weight:${card.styleQ.weight === 'bold' ? '700' : '400'};font-style:${card.styleQ.italic ? 'italic' : 'normal'};line-height:1.25;flex-shrink:0;word-wrap:break-word;overflow-wrap:break-word;">${escapeHtml(card.question)}</div>
+            <div style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:2px;width:100%;padding:0 2px;overflow:hidden;">${optionsHtml}</div>
+        </div>`;
+
+    // Réponse : div pleine largeur, rotation 180° sur le div lui-même (pas inline-block)
+    const answerInline = `
+        ${sep}
+        <div style="flex-shrink:0;text-align:${card.styleA.align || 'center'};transform:rotate(180deg);font-size:${card.styleA.size}px;color:${card.styleA.color};font-weight:${card.styleA.weight === 'bold' ? '700' : '400'};font-style:${card.styleA.italic ? 'italic' : 'normal'};word-wrap:break-word;line-height:1.25;">${escapeHtml(card.answer)}</div>`;
+
+    const answerFull = `
+        <div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;overflow:hidden;">
+            <div style="font-size:10px;color:#9ca3af;letter-spacing:.1em;text-transform:uppercase;font-weight:700;flex-shrink:0;">Réponse</div>
+            <div style="font-size:${Math.max(14, card.styleA.size + 4)}px;color:${card.styleA.color};font-weight:700;line-height:1.3;word-wrap:break-word;overflow:hidden;">${escapeHtml(card.answer)}</div>
+            <div style="font-size:10px;color:#9ca3af;margin-top:8px;">${escapeHtml(titleText)}</div>
+        </div>`;
+
+    if (side === 'front') return front;
+    if (side === 'answer') return answerFull;
+    return front + answerInline;
+}
+
 async function renderCardsToPrintLayout(mode = 'both') {
-    const MM     = CARD_PX_PER_MM;     // px par mm dans l'espace canonique
-    const A4_W   = 210 * MM;           // 1120 px
-    const A4_H   = 297 * MM;           // 1584 px
-    const CELL_W = 60 * MM;            // 320 px (= CARD_W)
-    const CELL_H = 85 * MM;            // ≈ 453 px (= CARD_H)
+    const PX_PER_MM = 3.7795275591;
+    const A4_W = 210 * PX_PER_MM;
+    const A4_H = 297 * PX_PER_MM;
+    const CARD_W = 60 * PX_PER_MM;
+    const CARD_H = 85 * PX_PER_MM;
 
     const groups = [];
     for (let i = 0; i < cards.length; i += 9) groups.push(cards.slice(i, i + 9));
@@ -2006,17 +1728,17 @@ async function renderCardsToPrintLayout(mode = 'both') {
         page.style.cssText = `
             width:${A4_W}px;height:${A4_H}px;background:white;
             display:grid;
-            grid-template-columns:repeat(3, ${CELL_W}px);
-            grid-auto-rows:${CELL_H}px;
-            gap:${8*MM}px ${6*MM}px;
+            grid-template-columns:repeat(3, ${CARD_W}px);
+            grid-auto-rows:${CARD_H}px;
+            gap:${8*PX_PER_MM}px ${6*PX_PER_MM}px;
             justify-content:center;align-content:start;
-            padding:${10*MM}px 0;
+            padding:${10*PX_PER_MM}px 0;
             box-sizing:border-box;
             page-break-after:always;break-after:page;
         `;
-        // Verso duplex : on inverse les colonnes ligne par ligne (0,1,2 → 2,1,0).
+        // For mirrored (duplex back), reorder by row to flip columns: 0,1,2 → 2,1,0 etc.
         let ordered = group.slice();
-        while (ordered.length < 9) ordered.push(null); // pad à 9 pour une grille régulière
+        while (ordered.length < 9) ordered.push(null); // pad to 9 for consistent grid
         if (mirrored) {
             const reordered = [];
             for (let r = 0; r < 3; r++) {
@@ -2026,18 +1748,24 @@ async function renderCardsToPrintLayout(mode = 'both') {
             ordered = reordered;
         }
         ordered.forEach(card => {
+            const div = document.createElement('div');
             if (!card) {
-                const ph = document.createElement('div');
-                ph.style.cssText = `width:${CELL_W}px;height:${CELL_H}px;background:transparent;`;
-                page.appendChild(ph);
+                div.style.cssText = `width:${CARD_W}px;height:${CARD_H}px;background:transparent;`;
+                page.appendChild(div);
                 return;
             }
-            // Cellule relative (comme l'hôte de l'aperçu) contenant le canvas absolu.
-            // Même markup que l'aperçu → parité stricte, sans transform (taille native 320×453).
-            const cell = document.createElement('div');
-            cell.style.cssText = `position:relative;width:${CELL_W}px;height:${CELL_H}px;overflow:hidden;`;
-            cell.innerHTML = cardCanvasHTML(card, { face: side });
-            page.appendChild(cell);
+            div.style.cssText = `
+                width:${CARD_W}px;height:${CARD_H}px;
+                background:${card.bgColor};
+                border:${settings.borderSize}px solid ${settings.borderColor};
+                border-radius:${settings.radius}px;
+                padding:${3*PX_PER_MM}px;
+                box-sizing:border-box;
+                display:flex;flex-direction:column;
+                overflow:hidden;
+            `;
+            div.innerHTML = buildCardHTML(card, { side });
+            page.appendChild(div);
         });
         root.appendChild(page);
         pages.push(page);
@@ -2149,29 +1877,21 @@ async function printDeck(mode = 'both') {
         document.body.appendChild(iframe);
         const doc = iframe.contentDocument;
         doc.open();
-        // Les pages sont en px canoniques (1120×1584). On les remet à l'échelle A4 exacte
-        // (210mm = 793.701px ; scale = 793.701/1120 = 0.708661) via une « feuille » A4.
         doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>EduCards — impression</title>
             <style>
                 @page { margin: 0; size: A4; }
                 body { margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .page-sheet { width: 210mm; height: 297mm; overflow: hidden; page-break-after: always; break-after: page; }
-                .page-sheet:last-child { page-break-after: auto; break-after: auto; }
-                .page-scale { transform: scale(0.708661); transform-origin: top left; }
+                .page { page-break-after: always; break-after: page; }
+                .page:last-child { page-break-after: auto; break-after: auto; }
             </style>
         </head><body></body></html>`);
         doc.close();
         // Wait for body to be ready
         await new Promise(r => setTimeout(r, 50));
         pages.forEach(p => {
-            const sheet = doc.createElement('div');
-            sheet.className = 'page-sheet';
             const clone = p.cloneNode(true);
-            clone.classList.add('page-scale');
-            clone.style.pageBreakAfter = '';   // c'est la feuille A4 qui gère les sauts
-            clone.style.breakAfter = '';
-            sheet.appendChild(clone);
-            doc.body.appendChild(sheet);
+            clone.classList.add('page');
+            doc.body.appendChild(clone);
         });
         // Wait for images in iframe to load
         const iframeImgs = doc.querySelectorAll('img');
@@ -2268,10 +1988,6 @@ function normalizeImportedCard(raw) {
         bgColor: safeColor(raw.bgColor, DEFAULTS.bgColor),
         title: typeof raw.title === 'string' ? raw.title : '',
         imgSize,
-        // Libellés V/F personnalisés (rétro-compat : ensureStyles posera les défauts si absents).
-        boolPrompt: typeof raw.boolPrompt === 'string' ? raw.boolPrompt.slice(0, 120) : BOOL_DEFAULTS.prompt,
-        boolTrue: (typeof raw.boolTrue === 'string' && raw.boolTrue.trim()) ? raw.boolTrue.slice(0, 60) : BOOL_DEFAULTS.yes,
-        boolFalse: (typeof raw.boolFalse === 'string' && raw.boolFalse.trim()) ? raw.boolFalse.slice(0, 60) : BOOL_DEFAULTS.no,
         styleQ: safeStyle(raw.styleQ, DEFAULTS.styleQ),
         styleA: safeStyle(raw.styleA, DEFAULTS.styleA),
         styleTitle: safeStyle(raw.styleTitle, DEFAULTS.styleTitle),
@@ -2376,38 +2092,36 @@ async function importJSON(e) {
         const safeImported = safeSettings(newSettings);
         if (safeImported) settings = { ...settings, ...safeImported };
     }
-
-    // Déplace les images importées (base64) vers IndexedDB → pas de saturation localStorage.
-    busy(true, "Traitement des images importées…");
-    try {
-        for (const c of cards) { try { await migrateCardImage(c); } catch {} }
-    } finally { busy(false); }
     save();
     render();
-    gcImages(); // récupère les blobs des cartes remplacées
 }
 
 /* ============================================================
    TUTORIEL
    ============================================================ */
-// sidebar:true  → l'élément vit dans la sidebar (drawer à ouvrir sur mobile)
-// editor:true   → ouvrir l'éditeur de la carte démo pour cette étape
 const tutorialSteps = [
     { title: "Bienvenue dans EduCards", body: "Un créateur de flashcards pour cours, révisions et quiz. Suivez ce tour rapide (6 étapes).", target: null },
-    { title: "Cliquez sur une carte", body: "Chaque carte est cliquable : ouvrez l'éditeur pour modifier titre, question, options et réponse.", target: () => document.querySelector('.card-container .card-scale-host') },
-    { title: "Personnalisez avec le panneau", body: "Tailles de police, couleurs, image, style gras/italique/souligné — et des réponses Vrai/Faux entièrement personnalisables.", target: () => $('editor'), editor: true },
-    { title: "Auto-ajuster (pro)", body: "Trop de texte qui déborde ? Un clic ajuste automatiquement les tailles pour que tout rentre dans la carte.", target: () => document.querySelector('[data-tutorial="autoscale"]'), sidebar: true },
-    { title: "Exportez vos cartes", body: "JSON pour sauvegarder, CSV pour Excel, PNG pour partager, PDF pour imprimer/partager proprement.", target: () => document.querySelector('[data-tutorial="export"]'), sidebar: true },
-    { title: "Imprimez vos flashcards", body: "Format A4 · 9 cartes par page (3×3) · prêt à découper. La réponse s'imprime à l'envers au verso.", target: () => document.querySelector('[data-tutorial="print"]'), sidebar: true }
+    { title: "Cliquez sur une carte", body: "Chaque carte est cliquable : ouvrez l'éditeur pour modifier titre, question, options et réponse.", target: () => document.querySelector('.card-container .card-fixed-size') },
+    // prepare : le panneau éditeur est fermé (hors écran) pendant le tour → on l'ouvre
+    // réellement sur la 1re carte pour que le spot pointe sur quelque chose de visible.
+    { title: "Personnalisez avec le panneau", body: "Tailles de police, couleurs, image, style gras/italique/souligné — par champ.", target: () => $('editor'), prepare: () => { if (cards[0]) { openEditor(cards[0].id); tutoOpenedEditor = true; return true; } return false; } },
+    { title: "Auto-ajuster (pro)", body: "Trop de texte qui déborde ? Un clic ajuste automatiquement les tailles pour que tout rentre dans la carte.", target: () => document.querySelector('[data-tutorial="autoscale"]') },
+    { title: "Exportez vos cartes", body: "JSON pour sauvegarder, CSV pour Excel, PNG pour partager, PDF pour imprimer/partager proprement.", target: () => document.querySelector('[data-tutorial="export"]') },
+    { title: "Imprimez vos flashcards", body: "Format A4 · 9 cartes par page (3×3) · prêt à découper. La réponse s'imprime à l'envers au verso.", target: () => document.querySelector('[data-tutorial="print"]') }
 ];
 let tutoIndex = 0;
-let tutoTempCardId = null;
-let tutoEditorId = null;     // carte dont l'éditeur est ouvert pour l'étape « panneau »
-let tutoEditorOpened = false; // l'éditeur a-t-il été ouvert par le tuto ?
+let tutoOpenedEditor = false; // éditeur ouvert par le tour → refermé en quittant l'étape
 
+let tutoTempCardId = null;
 function startTutorial() {
     tutoIndex = 0;
-    // Carte de DÉMO éphémère (non sauvegardée) s'il n'y a aucune carte.
+    // Carte démo orpheline d'un tour précédent interrompu → purge avant de recommencer.
+    if (tutoTempCardId) {
+        cards = cards.filter(c => c.id !== tutoTempCardId);
+        tutoTempCardId = null;
+    }
+    // S'il n'y a pas de cartes, on crée une carte de DÉMO éphémère (non sauvegardée)
+    // juste pour le tour — retirée à la fin pour ne pas polluer le deck de l'utilisateur.
     if (cards.length === 0) {
         const demo = ensureStyles({
             id: uid(),
@@ -2420,25 +2134,21 @@ function startTutorial() {
         });
         cards.push(demo);
         tutoTempCardId = demo.id;
-        render(); // pas de save()
+        render(); // pas de save() : la carte de démo ne doit pas persister
     }
-    tutoEditorId = tutoTempCardId || (cards[0] && cards[0].id) || null;
-    tutoEditorOpened = false;
     $('tutorial-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
     renderTutorialStep();
-    document.removeEventListener('keydown', tutoKeyHandler);
+    document.removeEventListener('keydown', tutoKeyHandler); // évite les doublons si relancé
     document.addEventListener('keydown', tutoKeyHandler);
 }
 function endTutorial() {
     $('tutorial-overlay').classList.remove('open');
-    $('tutorial-mask').classList.remove('show');
     document.body.style.overflow = '';
+    localStorage.setItem(TUTO_KEY, '1');
     document.removeEventListener('keydown', tutoKeyHandler);
-    try { localStorage.setItem(TUTO_KEY, '1'); } catch {}
-    if (tutoEditorOpened) { closeEditor(); tutoEditorOpened = false; }
-    if (window.innerWidth < 1024) closeSidebar();
-    // Retire la carte de démo éphémère si non remplacée par du contenu réel.
+    if (tutoOpenedEditor) { closeEditor(); tutoOpenedEditor = false; }
+    // Retire la carte de démo éphémère si elle n'a pas été remplacée par du contenu réel.
     if (tutoTempCardId) {
         cards = cards.filter(c => c.id !== tutoTempCardId);
         tutoTempCardId = null;
@@ -2461,89 +2171,47 @@ function renderTutorialStep() {
     $('tutoPrev').style.opacity = tutoIndex === 0 ? '.5' : '1';
     $('tutoNext').textContent = tutoIndex === tutorialSteps.length - 1 ? "Terminer" : "Suivant";
 
-    const mobile = window.innerWidth < 1024;
-    let delay = 0; // temps d'attente pour les animations (drawer / éditeur) avant de mesurer
-
-    // --- Gère l'ouverture/fermeture de l'éditeur selon l'étape ---
-    if (step.editor && tutoEditorId) {
-        if ($('editor').classList.contains('translate-x-full')) {
-            openEditor(tutoEditorId);
-            tutoEditorOpened = true;
-            delay = Math.max(delay, 320);
-        }
-    } else if (tutoEditorOpened) {
-        closeEditor();
-        tutoEditorOpened = false;
-        delay = Math.max(delay, 320);
-    }
-
-    // --- Gère la sidebar (drawer) sur mobile ---
-    if (mobile) {
-        const sidebarOpen = $('sidebar').classList.contains('open');
-        if (step.sidebar && !step.editor && !sidebarOpen) {
-            openSidebar();
-            delay = Math.max(delay, 340);
-        } else if (!step.sidebar && sidebarOpen) {
-            closeSidebar();
-            delay = Math.max(delay, 300);
-        }
-    }
-
-    const locate = () => positionTuto(step);
-    if (delay) setTimeout(locate, delay);
-    else requestAnimationFrame(locate);
-}
-
-// Place le spotlight + la bulle. Re-résout la cible (le DOM a pu changer) et tolère
-// une cible absente/cachée → repli sur une bulle centrée avec mask plein écran.
-function positionTuto(step) {
-    const spotEl = $('tutorial-spotlight-el');
-    const mask = $('tutorial-mask');
-    const bubble = $('tutorial-bubble');
-    let targetEl = step && step.target ? step.target() : null;
-    let r = targetEl ? targetEl.getBoundingClientRect() : null;
-
-    // Cible hors écran / invisible → la faire défiler dans la vue puis re-mesurer.
-    if (targetEl && r && (r.width === 0 || r.height === 0)) {
-        targetEl = null; r = null;
-    } else if (targetEl && r && (r.bottom < 0 || r.top > window.innerHeight)) {
-        try { targetEl.scrollIntoView({ block: 'center', behavior: 'auto' }); } catch {}
-        r = targetEl.getBoundingClientRect();
-    }
-
-    if (!targetEl || !r) {
-        // Étape centrée : pas de spotlight, mask plein écran.
-        spotEl.style.display = 'none';
-        mask.classList.add('show');
-        bubble.style.left = Math.round(window.innerWidth / 2 - bubble.offsetWidth / 2) + 'px';
-        bubble.style.top = Math.round(window.innerHeight / 2 - bubble.offsetHeight / 2) + 'px';
+    // Quitte l'étape « panneau » → referme l'éditeur ouvert par le tour.
+    if (tutoOpenedEditor && !step.prepare) { closeEditor(); tutoOpenedEditor = false; }
+    // Étape avec préparation (ex: ouvrir l'éditeur) : attendre la fin de la transition
+    // du panneau (300 ms) avant de mesurer sa position.
+    if (step.prepare && step.prepare()) {
+        setTimeout(() => positionTuto(step.target ? step.target() : null), 380);
         return;
     }
-
-    // Spotlight sur la cible (le box-shadow géant assombrit le reste).
-    mask.classList.remove('show');
-    const pad = 6;
-    spotEl.style.display = 'block';
-    spotEl.style.top = (r.top - pad) + 'px';
-    spotEl.style.left = (r.left - pad) + 'px';
-    spotEl.style.width = (r.width + pad * 2) + 'px';
-    spotEl.style.height = (r.height + pad * 2) + 'px';
-
-    // Bulle : sous la cible si la place le permet, sinon au-dessus, sinon à côté.
-    const bw = bubble.offsetWidth || 360;
-    const bh = bubble.offsetHeight || 180;
-    const gap = 16, margin = 12;
-    let top, left;
-    if (r.bottom + gap + bh <= window.innerHeight - margin) {
-        top = r.bottom + gap;                       // dessous
-    } else if (r.top - gap - bh >= margin) {
-        top = r.top - gap - bh;                      // dessus
-    } else {
-        top = clamp(r.top, margin, window.innerHeight - bh - margin); // à côté, aligné
+    let targetEl = step.target ? step.target() : null;
+    if (window.innerWidth < 1024 && targetEl && targetEl.closest('#sidebar')) {
+        openSidebar();
+        setTimeout(() => positionTuto(step.target ? step.target() : null), 350);
+        return;
     }
-    left = clamp(r.left, margin, window.innerWidth - bw - margin);
-    bubble.style.top = Math.round(top) + 'px';
-    bubble.style.left = Math.round(left) + 'px';
+    positionTuto(targetEl);
+}
+function positionTuto(targetEl) {
+    const spotEl = $('tutorial-spotlight-el');
+    const bubble = $('tutorial-bubble');
+    if (!targetEl) {
+        spotEl.style.display = 'none';
+        bubble.style.top = '50%';
+        bubble.style.left = '50%';
+        bubble.style.transform = 'translate(-50%, -50%)';
+        return;
+    }
+    bubble.style.transform = '';
+    const r = targetEl.getBoundingClientRect();
+    spotEl.style.display = 'block';
+    spotEl.style.top = (r.top - 6) + 'px';
+    spotEl.style.left = (r.left - 6) + 'px';
+    spotEl.style.width = (r.width + 12) + 'px';
+    spotEl.style.height = (r.height + 12) + 'px';
+
+    // Position bubble en fonction de l'espace dispo
+    const bw = 360, bh = 180;
+    let top = r.bottom + 16;
+    let left = Math.max(16, Math.min(window.innerWidth - bw - 16, r.left));
+    if (top + bh > window.innerHeight - 16) top = Math.max(16, r.top - bh - 16);
+    bubble.style.top = top + 'px';
+    bubble.style.left = left + 'px';
 }
 
 $('tutoNext').onclick = () => {
@@ -2552,16 +2220,11 @@ $('tutoNext').onclick = () => {
 };
 $('tutoPrev').onclick = () => { if (tutoIndex > 0) { tutoIndex--; renderTutorialStep(); } };
 $('tutoSkip').onclick = endTutorial;
+// Clic sur le fond sombre = quitter le tour (cohérent avec les autres modales).
+$('tutorial-mask').addEventListener('click', endTutorial);
 window.addEventListener('resize', () => {
     if ($('tutorial-overlay').classList.contains('open')) renderTutorialStep();
 });
-// Réajuste l'échelle des canvas (la largeur des colonnes change avec la fenêtre /
-// l'ouverture de l'éditeur). ResizeObserver couvre tous les cas, pas juste resize fenêtre.
-if (window.ResizeObserver) {
-    new ResizeObserver(() => scaleCardCanvases()).observe($('deck'));
-} else {
-    window.addEventListener('resize', scaleCardCanvases);
-}
 
 /* ============================================================
    STUDY MODE
@@ -2598,15 +2261,9 @@ function renderStudyCard() {
     $('studyProgress').textContent = `${studyIdx + 1} / ${studyOrder.length}`;
     const titleText = card.title?.trim() || settings.globalTitle;
     const lines = (card.options || '').split('\n').filter(l => l.trim() !== '');
-    let optionsHtml;
-    if (card.type === 'multiple') {
-        optionsHtml = lines.map((l, i) => `<div style="font-size:${Math.max(13, card.styleOptions.size + 3)}px;color:${card.styleOptions.color};text-align:left;line-height:1.4;margin:4px 0;"><b>${ALPHABET[i] || '•'})</b> ${escapeHtml(l)}</div>`).join('');
-    } else {
-        const b = boolLabels(card);
-        const pill = txt => `<span style="display:inline-block;padding:5px 16px;border-radius:999px;border:1.5px solid #6366f1;font-size:15px;font-weight:600;color:#4338ca;margin:0 5px;">${escapeHtml(txt)}</span>`;
-        optionsHtml = `<div style="font-size:14px;color:#6b7280;font-style:italic;margin-bottom:10px;">${escapeHtml(b.prompt)}</div>`
-            + `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:6px;">${pill(b.yes)}${pill(b.no)}</div>`;
-    }
+    const optionsHtml = card.type === 'multiple'
+        ? lines.map((l, i) => `<div style="font-size:${Math.max(13, card.styleOptions.size + 3)}px;color:${card.styleOptions.color};text-align:left;line-height:1.4;margin:4px 0;"><b>${ALPHABET[i] || '•'})</b> ${escapeHtml(l)}</div>`).join('')
+        : `<div style="font-size:14px;color:#6b7280;font-style:italic;">Vrai ou Faux ?</div>`;
     $('studyFront').innerHTML = `
         <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9ca3af;font-weight:700;">${escapeHtml(titleText)}</div>
         <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;margin-top:20px;">
@@ -2757,6 +2414,9 @@ document.addEventListener('keydown', e => {
         return;
     }
     if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Pendant le tutoriel, les raccourcis globaux sont gelés (sinon S/N/P ouvrent
+    // d'autres vues par-dessus le tour) — le tour gère ses propres touches.
+    if ($('tutorial-overlay').classList.contains('open')) return;
     switch (e.key) {
         case 'n': case 'N': addCard(); e.preventDefault(); break;
         case '/': $('searchInput').focus(); e.preventDefault(); break;
@@ -2768,18 +2428,14 @@ document.addEventListener('keydown', e => {
     }
 });
 
-// Init asynchrone : le chargement hydrate les images depuis IndexedDB avant le 1er rendu.
-(async () => {
-    try { await loadState(); } catch (e) { console.error(e); }
-    render();
-    if (window.lucide) lucide.createIcons();
-    gcImages(); // nettoie les blobs orphelins des sessions précédentes
+loadState();
+render();
+if (window.lucide) lucide.createIcons();
 
-    // Lancement automatique du tutoriel à la 1ère visite
-    let tutoDone = false;
-    try { tutoDone = !!localStorage.getItem(TUTO_KEY); } catch {}
-    if (!tutoDone) setTimeout(startTutorial, 500);
-})();
+// Lancement automatique du tutoriel à la 1ère visite
+if (!localStorage.getItem(TUTO_KEY)) {
+    setTimeout(startTutorial, 400);
+}
 </script>
 </body>
 </html>
