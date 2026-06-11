@@ -1600,16 +1600,13 @@ function optLineHTML(letter, text, accent, so) {
     return `<div style="${style}">${optBadgeHTML(letter, accent)}${escapeHtml(text)}</div>`;
 }
 
-// Choix Vrai/Faux personnalisés : prompt + deux pastilles (libellés custom).
+// Carte V/F : uniquement l'invite (« Vrai ou Faux ? ») — pas de pastilles de choix,
+// la carte reste épurée : titre + image + question + invite + réponse.
 function boolChoicesHTML(card) {
     const b = boolLabels(card);
     const so = card.styleOptions;
-    const accent = card.styleA.color || '#4f46e5';
-    const pill = txt => `<span style="display:inline-block;padding:3px 14px;border-radius:999px;border:1.5px solid ${accent};`
-        + `font-size:${so.size}px;font-weight:600;color:${so.color};white-space:nowrap;">${escapeHtml(txt)}</span>`;
-    const promptStyle = `text-align:center;font-style:italic;font-size:${so.size}px;color:${so.color};letter-spacing:.02em;margin-bottom:4px;`;
-    return `<div style="${promptStyle}">${escapeHtml(b.prompt)}</div>`
-        + `<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">${pill(b.yes)}${pill(b.no)}</div>`;
+    const promptStyle = `text-align:center;font-style:italic;font-size:${so.size}px;color:${so.color};letter-spacing:.02em;`;
+    return `<div style="${promptStyle}">${escapeHtml(b.prompt)}</div>`;
 }
 
 // Recto (titre + image + question + options/V-F).
@@ -1732,7 +1729,9 @@ function applyScale(card, factor, baseImgSize) {
     }
 }
 
-function rescaleCard(card) {
+// Recherche le facteur d'échelle « idéal » d'une carte (remplissage cible sans déborder).
+// Mute la carte passée (appeler sur une copie pour une mesure sans effet de bord).
+function computeIdealFactor(card) {
     ensureStyles(card);
     const baseImgSize = card.imgSize || 100;
     let lo = 0.30, hi = 1.70;
@@ -1753,7 +1752,30 @@ function rescaleCard(card) {
         }
         if (hi - lo < 0.01) break;
     }
-    applyScale(card, best.factor, baseImgSize);
+    return { factor: best.factor, baseImgSize };
+}
+
+function rescaleCard(card) {
+    const { factor, baseImgSize } = computeIdealFactor(card);
+    applyScale(card, factor, baseImgSize);
+    return measureContentHeight(card) <= CARD_FIT_H;
+}
+
+// Applique un facteur cible à une carte ; si elle déborde à ce facteur, réduit
+// individuellement jusqu'à tenir. Retourne true si la carte tient.
+function fitCardAt(card, targetFactor) {
+    ensureStyles(card);
+    const baseImgSize = card.imgSize || 100;
+    applyScale(card, targetFactor, baseImgSize);
+    if (measureContentHeight(card) <= CARD_FIT_H) return true;
+    let lo = 0.30, hi = targetFactor;
+    for (let i = 0; i < 14; i++) {
+        const mid = (lo + hi) / 2;
+        applyScale(card, mid, baseImgSize);
+        if (measureContentHeight(card) <= CARD_FIT_H) lo = mid; else hi = mid;
+        if (hi - lo < 0.01) break;
+    }
+    applyScale(card, lo, baseImgSize);
     return measureContentHeight(card) <= CARD_FIT_H;
 }
 
@@ -1802,18 +1824,25 @@ function applyTheme(key) {
     });
 }
 
+// Ajustement global HARMONISÉ : calcule le facteur idéal de chaque carte, prend la
+// MOYENNE du deck (rendu uniforme et professionnel), l'applique partout, puis réduit
+// individuellement les seules cartes trop denses pour que tout tienne.
 async function autoRescaleAll() {
     if (cards.length === 0) { toast("Aucune carte à ajuster.", 'error'); return; }
     const snapshot = JSON.parse(JSON.stringify(cards));
     busy(true, `Ajustement de ${cards.length} carte(s)…`);
     await new Promise(r => requestAnimationFrame(r));
+    // Phase 1 : facteur idéal par carte (sur copie → la carte reste intacte pendant la mesure)
+    const factors = cards.map(c => computeIdealFactor(JSON.parse(JSON.stringify(c))).factor);
+    const avg = factors.reduce((s, f) => s + f, 0) / factors.length;
+    // Phase 2 : taille moyenne pour tout le deck ; les cartes trop denses sont réduites juste assez.
     let success = 0;
-    cards.forEach(c => { if (rescaleCard(c)) success++; });
+    cards.forEach(c => { if (fitCardAt(c, avg)) success++; });
     save();
     render();
     busy(false);
     fxApply('fx-flash');
-    toast(`${success}/${cards.length} carte(s) ajustée(s)`, 'success', 5000, {
+    toast(`${success}/${cards.length} carte(s) ajustée(s) · tailles harmonisées`, 'success', 5000, {
         label: "Annuler",
         handler: () => { cards = snapshot; cards.forEach(ensureStyles); save(); render(); toast("Tailles restaurées", 'success', 1500); }
     });
@@ -2583,8 +2612,6 @@ $('tutoNext').onclick = () => {
 };
 $('tutoPrev').onclick = () => { if (tutoIndex > 0) { tutoIndex--; renderTutorialStep(); } };
 $('tutoSkip').onclick = endTutorial;
-// Clic sur le fond sombre = quitter le tour (cohérent avec les autres modales).
-$('tutorial-mask').addEventListener('click', endTutorial);
 window.addEventListener('resize', () => {
     if ($('tutorial-overlay').classList.contains('open')) renderTutorialStep();
 });
@@ -2636,9 +2663,7 @@ function renderStudyCard() {
         optionsHtml = lines.map((l, i) => `<div style="font-size:${Math.max(13, card.styleOptions.size + 3)}px;color:${card.styleOptions.color};text-align:left;line-height:1.4;margin:4px 0;"><b>${ALPHABET[i] || '•'})</b> ${escapeHtml(l)}</div>`).join('');
     } else {
         const b = boolLabels(card);
-        const pill = txt => `<span style="display:inline-block;padding:5px 16px;border-radius:999px;border:1.5px solid #6366f1;font-size:15px;font-weight:600;color:#4338ca;margin:0 5px;">${escapeHtml(txt)}</span>`;
-        optionsHtml = `<div style="font-size:14px;color:#6b7280;font-style:italic;margin-bottom:10px;">${escapeHtml(b.prompt)}</div>`
-            + `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:6px;">${pill(b.yes)}${pill(b.no)}</div>`;
+        optionsHtml = `<div style="font-size:14px;color:#6b7280;font-style:italic;">${escapeHtml(b.prompt)}</div>`;
     }
     $('studyFront').innerHTML = `
         <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9ca3af;font-weight:700;">${escapeHtml(titleText)}</div>
