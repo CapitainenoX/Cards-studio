@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#4f46e5">
-    <title>EduCards Studio Pro — Créateur de flashcards</title>
+    <title>Cards Studio — Créateur de flashcards</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -194,6 +194,20 @@
         .toast.error { background: var(--color-danger); }
         .toast button { background: rgba(255,255,255,.18); color: white; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
 
+        /* ---- COLOR SWATCH (sélecteurs de couleur harmonisés) ---- */
+        .color-swatch {
+            -webkit-appearance: none; appearance: none; padding: 0; border: none;
+            border-radius: 9px; cursor: pointer; overflow: hidden;
+            box-shadow: 0 0 0 1px #e5e7eb, 0 1px 2px rgba(0,0,0,.06);
+            transition: box-shadow .15s ease, transform .1s ease;
+        }
+        .color-swatch:hover { box-shadow: 0 0 0 2px #a5b4fc, 0 1px 3px rgba(0,0,0,.10); }
+        .color-swatch:active { transform: scale(.94); }
+        .color-swatch:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(99,102,241,.45); }
+        .color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+        .color-swatch::-webkit-color-swatch { border: none; border-radius: 9px; }
+        .color-swatch::-moz-color-swatch { border: none; border-radius: 9px; }
+
         /* ---- MODAL ---- */
         .modal-backdrop {
             position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 90;
@@ -308,7 +322,7 @@
             <i data-lucide="menu" class="w-5 h-5"></i>
         </button>
         <h1 class="text-base font-bold flex items-center gap-2">
-            <span class="w-2.5 h-2.5 bg-indigo-600 rounded-full"></span> EduCards
+            <span class="w-2.5 h-2.5 bg-indigo-600 rounded-full"></span> Cards Studio
         </h1>
         <button onclick="addCard()" aria-label="Ajouter une carte" class="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
             <i data-lucide="plus" class="w-5 h-5"></i>
@@ -320,7 +334,7 @@
         <div class="p-6 lg:p-7 flex items-start justify-between">
             <div>
                 <h1 class="text-xl font-bold tracking-tight flex items-center gap-2">
-                    <span class="w-3 h-3 bg-indigo-600 rounded-full"></span> EduCards
+                    <span class="w-3 h-3 bg-indigo-600 rounded-full"></span> Cards Studio
                 </h1>
                 <p class="text-xs text-gray-500 mt-0.5">Créateur de flashcards</p>
                 <p id="stats" class="text-[11px] text-gray-600 mt-2 font-medium"></p>
@@ -368,7 +382,7 @@
 
                 <div class="flex justify-between items-center text-sm">
                     <label for="globalBorderColor" class="text-gray-700">Couleur bordure</label>
-                    <input type="color" id="globalBorderColor" value="#e5e7eb" onchange="onGlobalSettingChange()" class="w-8 h-8 rounded-lg cursor-pointer border border-gray-200">
+                    <input type="color" id="globalBorderColor" value="#e5e7eb" onchange="onGlobalSettingChange()" class="color-swatch w-10 h-9">
                 </div>
 
                 <div class="space-y-2">
@@ -453,7 +467,7 @@
                 <div class="w-16 h-16 mx-auto mb-4 bg-white rounded-2xl shadow-sm flex items-center justify-center">
                     <i data-lucide="sparkles" class="w-8 h-8 text-indigo-600"></i>
                 </div>
-                <h2 class="text-2xl font-bold mb-2">Bienvenue dans EduCards</h2>
+                <h2 class="text-2xl font-bold mb-2">Bienvenue dans Cards Studio</h2>
                 <p class="text-gray-600 mb-6">Créez, personnalisez et imprimez vos flashcards pédagogiques.</p>
                 <div class="flex flex-col sm:flex-row gap-3 justify-center mb-8">
                     <button onclick="startTutorial()" class="px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold hover:bg-gray-50 transition flex items-center justify-center gap-2">
@@ -499,7 +513,7 @@
 
 <!-- ============ STUDY MODE ============ -->
 <div id="study-overlay" class="no-print fixed inset-0 z-[95] bg-gray-900/95 backdrop-blur-sm hidden flex-col" role="dialog" aria-modal="true" aria-labelledby="studyTitle">
-    <div class="flex items-center justify-between p-4 text-white">
+    <div class="flex items-center justify-between p-4 text-white relative z-10">
         <div class="flex items-center gap-3">
             <h2 id="studyTitle" class="font-bold text-lg">Mode étude</h2>
             <span id="studyProgress" class="text-sm text-gray-300 font-medium"></span>
@@ -516,15 +530,15 @@
             </button>
         </div>
     </div>
-    <div class="flex-1 flex items-center justify-center px-4 pb-4">
-        <div id="studyCardWrap" class="relative w-full max-w-md aspect-[320/450]" style="perspective:1200px;">
+    <div class="flex-1 min-h-0 flex items-center justify-center px-4 pb-4">
+        <div id="studyCardWrap" class="relative aspect-[320/450] h-full w-auto max-h-full max-w-md" style="perspective:1200px;">
             <div id="studyCardInner" style="position:absolute;inset:0;transition:transform .6s;transform-style:preserve-3d;">
                 <div id="studyFront" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:white;border-radius:20px;padding:32px;display:flex;flex-direction:column;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.4);"></div>
                 <div id="studyBack" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:#1e1b4b;color:white;border-radius:20px;padding:32px;display:flex;align-items:center;justify-content:center;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.4);transform:rotateY(180deg);"></div>
             </div>
         </div>
     </div>
-    <div class="flex items-center justify-center gap-3 pb-6 px-4">
+    <div class="flex items-center justify-center gap-3 pb-6 px-4 relative z-10">
         <button id="studyPrev" aria-label="Précédente" class="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white">
             <i data-lucide="chevron-left" class="w-5 h-5"></i>
         </button>
@@ -656,7 +670,7 @@
 
 <script>
 /* =====================================================================
-   EduCards Studio Pro — v2 (responsive, tutoriel, auto-rescale, PDF)
+   Cards Studio — v2 (responsive, tutoriel, auto-rescale, PDF)
    ===================================================================== */
 
 const STORAGE_KEY = 'edu_pro_cards_v2';
@@ -677,6 +691,24 @@ const CARD_PX_PER_MM = CARD_W / 60; // 5.3333 px = 1 mm (mapping impression/PDF)
 
 // Libellés V/F par défaut (personnalisables par carte).
 const BOOL_DEFAULTS = { prompt: 'Vrai ou Faux ?', yes: 'Vrai', no: 'Faux' };
+
+// Logo des pages exportées/imprimées : placeholder éditable (remplacer site/logo.png
+// par votre logo). N'apparaît jamais dans l'app. Préchargé en data URL pour un rendu
+// fiable par html2canvas ; à défaut, URL absolue same-origin.
+let LOGO_SRC = (() => { try { return new URL('logo.png', location.href).href; } catch { return 'logo.png'; } })();
+async function preloadLogo() {
+    try {
+        const res = await fetch(LOGO_SRC);
+        if (!res.ok) return;
+        const blob = await res.blob();
+        LOGO_SRC = await new Promise((resolve, reject) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(fr.result);
+            fr.onerror = reject;
+            fr.readAsDataURL(blob);
+        });
+    } catch { /* garde l'URL absolue */ }
+}
 
 const DEFAULTS = {
     styleQ: { size: 18, color: '#111827', weight: 'bold', italic: false, underline: false, align: 'center' },
@@ -1284,7 +1316,7 @@ function renderEditor() {
                 <label class="text-[11px] font-bold text-gray-600 uppercase tracking-widest">Apparence</label>
                 <div class="flex items-center justify-between">
                     <label for="cardBgColor" class="text-sm text-gray-700">Fond de la carte</label>
-                    <input id="cardBgColor" type="color" value="${escapeAttr(card.bgColor)}" onchange="updateProp('bgColor', this.value)" class="w-9 h-9 rounded-lg cursor-pointer border border-gray-200">
+                    <input id="cardBgColor" type="color" value="${escapeAttr(card.bgColor)}" onchange="updateProp('bgColor', this.value)" class="color-swatch w-10 h-9">
                 </div>
                 <div class="space-y-2">
                     <div class="flex justify-between text-xs text-gray-600">
@@ -1320,7 +1352,7 @@ function renderEditor() {
 
             ${textBlock('Réponse', 'answer', card.answer || '', 'styleA', card.styleA, false)}
             ${card.type === 'boolean' ? `
-                <p class="text-[11px] text-gray-400 -mt-2">La réponse est libre : complète-la si besoin (ex. « Faux — explication… »). Les boutons ci-dessus posent le libellé en tête sans perdre ton texte.</p>
+                <p class="text-[11px] text-gray-400 -mt-2">La réponse est libre : écris « Vrai » ou « Faux » (avec une explication si besoin, ex. « Faux — … »).</p>
             ` : ''}
 
             <div class="flex gap-2">
@@ -1350,35 +1382,16 @@ function renderEditor() {
     }
 }
 
-// Éditeur Vrai/Faux : invite + 2 libellés personnalisables + sélection de la bonne réponse.
+// Éditeur Vrai/Faux épuré : uniquement l'invite affichée au recto (« Vrai ou Faux ? »).
+// La bonne réponse se saisit librement dans le champ « Réponse » ci-dessous — aucun bouton V/F.
 function boolEditorHTML(card) {
     const b = boolLabels(card);
-    const yesCorrect = boolAnswerIsYes(card);
-    const correctBtn = (isYes) => {
-        const on = isYes === yesCorrect;
-        return `<button type="button" onclick="setBoolCorrect(${isYes})" aria-pressed="${on}" title="Marquer comme bonne réponse"
-            class="shrink-0 px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-1 ${on ? 'bg-emerald-600 text-white' : 'border border-gray-200 text-gray-500 hover:bg-gray-50'}">
-            <i data-lucide="check" class="w-3.5 h-3.5"></i> ${on ? 'Bonne' : 'Choisir'}
-        </button>`;
-    };
     return `
         <div class="space-y-2">
             <input id="ed_boolPrompt" type="text" value="${escapeAttr(b.prompt)}" oninput="updateBoolPrompt(this.value)"
                 placeholder="Question d'invite (ex : Vrai ou Faux ?)" aria-label="Question d'invite Vrai/Faux"
                 class="w-full border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-            <div class="flex items-center gap-2">
-                <input id="ed_boolTrue" type="text" value="${escapeAttr(b.yes)}" oninput="updateBoolLabel('yes', this.value)"
-                    placeholder="Vrai" aria-label="Libellé du premier choix"
-                    class="flex-1 border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-                ${correctBtn(true)}
-            </div>
-            <div class="flex items-center gap-2">
-                <input id="ed_boolFalse" type="text" value="${escapeAttr(b.no)}" oninput="updateBoolLabel('no', this.value)"
-                    placeholder="Faux" aria-label="Libellé du second choix"
-                    class="flex-1 border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-                ${correctBtn(false)}
-            </div>
-            <p class="text-[11px] text-gray-500">Personnalisez les deux réponses (ex : Oui/Non, Correct/Incorrect) et marquez la bonne.</p>
+            <p class="text-[11px] text-gray-500">Le recto affiche cette invite. Saisissez la réponse (Vrai / Faux + explication) dans le champ « Réponse » ci-dessous.</p>
         </div>`;
 }
 function updateBoolPrompt(v) {
@@ -1450,7 +1463,7 @@ function styleRow(target, styleObj, label) {
                 <span class="w-10 text-center text-xs font-bold">${styleObj.size}px</span>
                 <button aria-label="Augmenter taille" onclick="adjustStyleSlider('${target}', 'size', 1)" class="w-7 h-7 text-sm">+</button>
             </div>
-            <input type="color" aria-label="Couleur ${escapeAttr(label)}" value="${escapeAttr(styleObj.color)}" onchange="updateStyle('${target}', 'color', this.value)" class="w-9 h-9 rounded cursor-pointer border border-gray-200">
+            <input type="color" aria-label="Couleur ${escapeAttr(label)}" value="${escapeAttr(styleObj.color)}" onchange="updateStyle('${target}', 'color', this.value)" class="color-swatch w-10 h-9">
         </div>
     `;
 }
@@ -1633,8 +1646,10 @@ function cardFrontHTML(card) {
 // Réponse en ligne (renversée 180° pour découpe recto/verso).
 function cardAnswerInlineHTML(card) {
     const borderC = settings.borderColor || '#e5e7eb';
-    const sep = `<div style="height:1px;margin:10px 28px 8px;background:${borderC};flex-shrink:0;"></div>`;
-    return sep + `<div style="${cardTextStyle(card.styleA, 'transform:rotate(180deg);flex-shrink:0;line-height:1.25;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.answer)}</div>`;
+    // Barre estompée aux extrémités (centre plus marqué). linear-gradient = compatible html2canvas.
+    // Marge basse + padding-haut généreux : évite le chevauchement avec la réponse (rotée) à l'export.
+    const sep = `<div style="height:2px;margin:10px 24px 12px;border-radius:2px;background:linear-gradient(to right, transparent 0%, ${borderC} 18%, ${borderC} 82%, transparent 100%);flex-shrink:0;"></div>`;
+    return sep + `<div style="${cardTextStyle(card.styleA, 'transform:rotate(180deg);flex-shrink:0;line-height:1.25;padding-top:2px;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.answer)}</div>`;
 }
 
 // Réponse pleine page (mode duplex / verso séparé).
@@ -1699,8 +1714,8 @@ function buildProbeHTML(card) {
             <div style="${cardTextStyle(card.styleQ, 'line-height:1.3;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.question)}</div>
             <div style="display:flex;flex-direction:column;gap:4px;padding:0 2px;">${optionsHtml}</div>
         </div>
-        <div style="height:1px;margin:10px 28px 8px;background:#ccc;"></div>
-        <div style="${cardTextStyle(card.styleA, 'line-height:1.25;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.answer)}</div>`;
+        <div style="height:2px;margin:10px 24px 12px;background:#ccc;"></div>
+        <div style="${cardTextStyle(card.styleA, 'line-height:1.25;padding-top:2px;word-wrap:break-word;overflow-wrap:break-word;')}">${escapeHtml(card.answer)}</div>`;
 }
 // Hauteur réelle du contenu (padding inclus), dans la largeur canonique.
 function measureContentHeight(card) {
@@ -1735,24 +1750,24 @@ function computeIdealFactor(card) {
     ensureStyles(card);
     const baseImgSize = card.imgSize || 100;
     let lo = 0.30, hi = 1.70;
-    let best = { factor: lo, dist: Infinity, h: Infinity };
+    // On retient le plus grand facteur qui TIENT et dont le remplissage est le plus proche de l'idéal.
+    let best = { factor: lo, dist: Infinity, fits: false };
 
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 22; i++) {
         const mid = (lo + hi) / 2;
         applyScale(card, mid, baseImgSize);
         const h = measureContentHeight(card);
         if (h > CARD_FIT_H) {
-            hi = mid;
-            if (best.h === Infinity && mid < best.factor) best = { factor: mid, dist: h - CARD_FIT_H, h };
+            hi = mid;                        // déborde → réduire
         } else {
+            lo = mid;                        // tient → on peut viser plus grand
             const dist = Math.abs(FILL_IDEAL - h);
-            if (best.h === Infinity || dist < best.dist) best = { factor: mid, dist, h };
-            if (h < FILL_MIN) lo = mid;
-            else break;
+            if (!best.fits || dist < best.dist) best = { factor: mid, dist, fits: true };
         }
-        if (hi - lo < 0.01) break;
+        if (hi - lo < 0.005) break;
     }
-    return { factor: best.factor, baseImgSize };
+    // Aucun facteur testé ne tient (contenu très dense) → plancher 0.30 pour minimiser le débordement.
+    return { factor: best.fits ? best.factor : 0.30, baseImgSize };
 }
 
 function rescaleCard(card) {
@@ -2013,7 +2028,7 @@ async function exportJSON() {
         };
         blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     } finally { busy(false); }
-    const r = await deliverBlob(blob, safeFilename('deck-educards') + '.json', 'application/json');
+    const r = await deliverBlob(blob, safeFilename('deck-cards-studio') + '.json', 'application/json');
     toast(`${deliveredMsg(r, 'JSON')} · ${cards.length} cartes`, 'success');
 }
 
@@ -2034,7 +2049,7 @@ async function exportCSV() {
         csv += [title, c.question, c.type, optionsCol, c.answer].map(esc).join(sep) + '\r\n';
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const r = await deliverBlob(blob, safeFilename('deck-educards') + '.csv', 'text/csv');
+    const r = await deliverBlob(blob, safeFilename('deck-cards-studio') + '.csv', 'text/csv');
     toast(`${deliveredMsg(r, 'CSV')} · ${cards.length} cartes`, 'success');
 }
 
@@ -2059,6 +2074,7 @@ async function renderCardsToPrintLayout(mode = 'both') {
     const buildPage = (group, side, mirrored) => {
         const page = document.createElement('div');
         page.style.cssText = `
+            position:relative;
             width:${A4_W}px;height:${A4_H}px;background:white;
             display:grid;
             grid-template-columns:repeat(3, ${CELL_W}px);
@@ -2069,6 +2085,14 @@ async function renderCardsToPrintLayout(mode = 'both') {
             box-sizing:border-box;
             page-break-after:always;break-after:page;
         `;
+        // Logo de marque (placeholder site/logo.png, éditable). Positionné en absolu
+        // dans la marge haute → n'enlève pas de place à la grille (9 cartes/page conservées).
+        // N'apparaît QUE sur l'export/impression, jamais dans l'app.
+        const logo = document.createElement('div');
+        logo.style.cssText = `position:absolute;top:6px;left:0;right:0;height:40px;`
+            + `display:flex;align-items:center;justify-content:center;pointer-events:none;`;
+        logo.innerHTML = `<img src="${LOGO_SRC}" alt="" style="max-height:36px;max-width:42%;object-fit:contain;display:block;">`;
+        page.appendChild(logo);
         // Verso duplex : on inverse les colonnes ligne par ligne (0,1,2 → 2,1,0).
         let ordered = group.slice();
         while (ordered.length < 9) ordered.push(null); // pad à 9 pour une grille régulière
@@ -2126,6 +2150,7 @@ async function renderCardsToPrintLayout(mode = 'both') {
 
 async function exportPNG() {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
+    if (!window.html2canvas) { toast("Bibliothèque d'image non chargée (vérifiez votre connexion).", 'error', 5000); return; }
     busy(true, "Génération du PNG…");
     let layout = null;
     try {
@@ -2138,18 +2163,20 @@ async function exportPNG() {
         // Pré-générer tous les blobs avant toute interaction utilisateur
         const blobs = [];
         for (let i = 0; i < pages.length; i++) {
-            const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-            blobs.push(await new Promise(res => canvas.toBlob(res, 'image/png')));
+            const canvas = await window.html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+            const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+            if (!blob) throw new Error("Canvas vide ou trop volumineux (toBlob a renvoyé null).");
+            blobs.push(blob);
         }
         busy(false); // libérer le spinner avant la modal mobile
         // Single page : flux normal (modal mobile / download desktop)
         if (blobs.length === 1) {
-            const r = await deliverBlob(blobs[0], safeFilename('deck-educards') + '.png', 'image/png');
+            const r = await deliverBlob(blobs[0], safeFilename('deck-cards-studio') + '.png', 'image/png');
             toast(`${deliveredMsg(r, 'PNG')}`, 'success');
         } else {
             // Multi-page : download direct (pas de modal × N)
             blobs.forEach((blob, i) => {
-                downloadBlob(blob, safeFilename('deck-educards') + `-p${i+1}.png`);
+                downloadBlob(blob, safeFilename('deck-cards-studio') + `-p${i+1}.png`);
             });
             toast(`PNG téléchargé · ${blobs.length} pages`, 'success');
         }
@@ -2165,6 +2192,7 @@ async function exportPNG() {
 async function exportPDF(mode = 'both') {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
     if (!window.jspdf) { toast("Bibliothèque PDF non chargée.", 'error'); return; }
+    if (!window.html2canvas) { toast("Bibliothèque d'image non chargée (vérifiez votre connexion).", 'error', 5000); return; }
     busy(true, "Génération du PDF…");
     let layout = null;
     try {
@@ -2173,14 +2201,14 @@ async function exportPDF(mode = 'both') {
         layout = await renderCardsToPrintLayout(mode);
         const { pages } = layout;
         for (let i = 0; i < pages.length; i++) {
-            const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+            const canvas = await window.html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
             const imgData = canvas.toDataURL('image/jpeg', 0.92);
             if (i > 0) pdf.addPage();
             pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
         }
         const blob = pdf.output('blob');
         busy(false); // libérer le spinner avant la modal mobile
-        const r = await deliverBlob(blob, safeFilename('deck-educards') + '.pdf', 'application/pdf');
+        const r = await deliverBlob(blob, safeFilename('deck-cards-studio') + '.pdf', 'application/pdf');
         toast(`${deliveredMsg(r, 'PDF')} · ${pages.length} page${pages.length>1?'s':''}`, 'success');
     } catch (err) {
         console.error(err);
@@ -2206,7 +2234,7 @@ async function printDeck(mode = 'both') {
         doc.open();
         // Les pages sont en px canoniques (1120×1584). On les remet à l'échelle A4 exacte
         // (210mm = 793.701px ; scale = 793.701/1120 = 0.708661) via une « feuille » A4.
-        doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>EduCards — impression</title>
+        doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Cards Studio — impression</title>
             <style>
                 @page { margin: 0; size: A4; }
                 body { margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -2336,7 +2364,9 @@ function normalizeImportedCard(raw) {
 function safeSettings(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const out = {};
-    if (typeof raw.globalTitle === 'string') out.globalTitle = raw.globalTitle.slice(0, 200);
+    // Titre du deck : accepte les noms d'anciens formats en plus de globalTitle.
+    const title = raw.globalTitle ?? raw.title ?? raw.name ?? raw.deckTitle;
+    if (typeof title === 'string') out.globalTitle = title.slice(0, 200);
     if (raw.borderColor) {
         const c = safeColor(raw.borderColor, null);
         if (c) out.borderColor = c;
@@ -2350,9 +2380,17 @@ function safeSettings(raw) {
 function extractDeckPayload(imported) {
     if (Array.isArray(imported)) return { rawCards: imported, newSettings: null };
     if (!imported || typeof imported !== 'object') return null;
-    if (Array.isArray(imported.cards)) return { rawCards: imported.cards, newSettings: imported.settings };
-    if (Array.isArray(imported.deck))  return { rawCards: imported.deck,  newSettings: imported.settings };
-    if (Array.isArray(imported.flashcards)) return { rawCards: imported.flashcards, newSettings: null };
+    // Settings éventuels + titre de deck rangé à la racine (anciens formats).
+    // safeSettings reconnaît globalTitle/title/name/deckTitle.
+    const wrap = (imported.settings && typeof imported.settings === 'object') ? { ...imported.settings } : {};
+    if (wrap.globalTitle == null) {
+        const rootTitle = imported.globalTitle ?? imported.title ?? imported.name ?? imported.deckTitle;
+        if (typeof rootTitle === 'string') wrap.globalTitle = rootTitle;
+    }
+    const newSettings = Object.keys(wrap).length ? wrap : null;
+    if (Array.isArray(imported.cards)) return { rawCards: imported.cards, newSettings };
+    if (Array.isArray(imported.deck))  return { rawCards: imported.deck,  newSettings };
+    if (Array.isArray(imported.flashcards)) return { rawCards: imported.flashcards, newSettings };
     if (imported.question || imported.answer) return { rawCards: [imported], newSettings: null };
     return null;
 }
@@ -2410,19 +2448,16 @@ async function importJSON(e) {
         mode = choice;
     }
 
+    // Dans les DEUX modes : id frais + structure complète (ensureStyles) pour CHAQUE
+    // carte importée → conversion ancien format → nouveau, et édition fiable (l'éditeur
+    // cible la carte par son id ; un id ancien/dupliqué la rendait non modifiable).
+    const toNewCard = c => ensureStyles({ ...c, id: uid() });
     if (mode === 'merge') {
-        // Regénère TOUS les ids importés pour garantir l'unicité (entre fichiers et avec l'existant)
-        const fresh = normalized.map(c => ({ ...c, id: uid() }));
+        const fresh = normalized.map(toNewCard);
         cards = cards.concat(fresh);
         toast(`Deck fusionné · +${fresh.length} cartes · total ${cards.length}${multi ? ` · ${files.length} fichiers` : ''}`, 'success');
     } else {
-        // Multi-file replace : dédup interne aussi (deux fichiers peuvent avoir même id)
-        const seen = new Set();
-        cards = normalized.map(c => {
-            if (seen.has(c.id)) c = { ...c, id: uid() };
-            seen.add(c.id);
-            return c;
-        });
+        cards = normalized.map(toNewCard);
         toast(`Deck importé · ${cards.length} cartes${multi ? ` (${files.length} fichiers)` : ''}${skipped ? ` · ${skipped} ignorée(s)` : ''}`, 'success');
     }
 
@@ -2448,7 +2483,7 @@ async function importJSON(e) {
 // sidebar:true  → l'élément vit dans la sidebar (drawer à ouvrir sur mobile)
 // editor:true   → ouvrir l'éditeur de la carte démo pour cette étape
 const tutorialSteps = [
-    { title: "Bienvenue dans EduCards", body: "Un créateur de flashcards pour cours, révisions et quiz. Suivez ce tour rapide (6 étapes).", target: null },
+    { title: "Bienvenue dans Cards Studio", body: "Un créateur de flashcards pour cours, révisions et quiz. Suivez ce tour rapide (6 étapes).", target: null },
     { title: "Cliquez sur une carte", body: "Chaque carte est cliquable : ouvrez l'éditeur pour modifier titre, question, options et réponse.", target: () => document.querySelector('.card-container .card-scale-host') },
     { title: "Personnalisez avec le panneau", body: "Tailles de police, couleurs, image, style gras/italique/souligné — et des réponses Vrai/Faux entièrement personnalisables.", target: () => $('editor'), editor: true },
     { title: "Auto-ajuster (pro)", body: "Trop de texte qui déborde ? Un clic ajuste automatiquement les tailles pour que tout rentre dans la carte.", target: () => document.querySelector('[data-tutorial="autoscale"]'), sidebar: true },
@@ -2832,6 +2867,7 @@ document.addEventListener('keydown', e => {
 // Init asynchrone : le chargement hydrate les images depuis IndexedDB avant le 1er rendu.
 (async () => {
     try { await loadState(); } catch (e) { console.error(e); }
+    preloadLogo(); // best-effort, non bloquant : logo des pages exportées/imprimées
     render();
     if (window.lucide) lucide.createIcons();
     gcImages(); // nettoie les blobs orphelins des sessions précédentes
