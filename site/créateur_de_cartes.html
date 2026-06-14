@@ -1320,7 +1320,7 @@ function renderEditor() {
 
             ${textBlock('Réponse', 'answer', card.answer || '', 'styleA', card.styleA, false)}
             ${card.type === 'boolean' ? `
-                <p class="text-[11px] text-gray-400 -mt-2">La réponse est libre : complète-la si besoin (ex. « Faux — explication… »). Les boutons ci-dessus posent le libellé en tête sans perdre ton texte.</p>
+                <p class="text-[11px] text-gray-400 -mt-2">La réponse est libre : écris « Vrai » ou « Faux » (avec une explication si besoin, ex. « Faux — … »).</p>
             ` : ''}
 
             <div class="flex gap-2">
@@ -1350,35 +1350,16 @@ function renderEditor() {
     }
 }
 
-// Éditeur Vrai/Faux : invite + 2 libellés personnalisables + sélection de la bonne réponse.
+// Éditeur Vrai/Faux épuré : uniquement l'invite affichée au recto (« Vrai ou Faux ? »).
+// La bonne réponse se saisit librement dans le champ « Réponse » ci-dessous — aucun bouton V/F.
 function boolEditorHTML(card) {
     const b = boolLabels(card);
-    const yesCorrect = boolAnswerIsYes(card);
-    const correctBtn = (isYes) => {
-        const on = isYes === yesCorrect;
-        return `<button type="button" onclick="setBoolCorrect(${isYes})" aria-pressed="${on}" title="Marquer comme bonne réponse"
-            class="shrink-0 px-3 h-10 rounded-lg text-xs font-bold flex items-center gap-1 ${on ? 'bg-emerald-600 text-white' : 'border border-gray-200 text-gray-500 hover:bg-gray-50'}">
-            <i data-lucide="check" class="w-3.5 h-3.5"></i> ${on ? 'Bonne' : 'Choisir'}
-        </button>`;
-    };
     return `
         <div class="space-y-2">
             <input id="ed_boolPrompt" type="text" value="${escapeAttr(b.prompt)}" oninput="updateBoolPrompt(this.value)"
                 placeholder="Question d'invite (ex : Vrai ou Faux ?)" aria-label="Question d'invite Vrai/Faux"
                 class="w-full border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-            <div class="flex items-center gap-2">
-                <input id="ed_boolTrue" type="text" value="${escapeAttr(b.yes)}" oninput="updateBoolLabel('yes', this.value)"
-                    placeholder="Vrai" aria-label="Libellé du premier choix"
-                    class="flex-1 border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-                ${correctBtn(true)}
-            </div>
-            <div class="flex items-center gap-2">
-                <input id="ed_boolFalse" type="text" value="${escapeAttr(b.no)}" oninput="updateBoolLabel('no', this.value)"
-                    placeholder="Faux" aria-label="Libellé du second choix"
-                    class="flex-1 border border-gray-200 p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-100">
-                ${correctBtn(false)}
-            </div>
-            <p class="text-[11px] text-gray-500">Personnalisez les deux réponses (ex : Oui/Non, Correct/Incorrect) et marquez la bonne.</p>
+            <p class="text-[11px] text-gray-500">Le recto affiche cette invite. Saisissez la réponse (Vrai / Faux + explication) dans le champ « Réponse » ci-dessous.</p>
         </div>`;
 }
 function updateBoolPrompt(v) {
@@ -1735,24 +1716,24 @@ function computeIdealFactor(card) {
     ensureStyles(card);
     const baseImgSize = card.imgSize || 100;
     let lo = 0.30, hi = 1.70;
-    let best = { factor: lo, dist: Infinity, h: Infinity };
+    // On retient le plus grand facteur qui TIENT et dont le remplissage est le plus proche de l'idéal.
+    let best = { factor: lo, dist: Infinity, fits: false };
 
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 22; i++) {
         const mid = (lo + hi) / 2;
         applyScale(card, mid, baseImgSize);
         const h = measureContentHeight(card);
         if (h > CARD_FIT_H) {
-            hi = mid;
-            if (best.h === Infinity && mid < best.factor) best = { factor: mid, dist: h - CARD_FIT_H, h };
+            hi = mid;                        // déborde → réduire
         } else {
+            lo = mid;                        // tient → on peut viser plus grand
             const dist = Math.abs(FILL_IDEAL - h);
-            if (best.h === Infinity || dist < best.dist) best = { factor: mid, dist, h };
-            if (h < FILL_MIN) lo = mid;
-            else break;
+            if (!best.fits || dist < best.dist) best = { factor: mid, dist, fits: true };
         }
-        if (hi - lo < 0.01) break;
+        if (hi - lo < 0.005) break;
     }
-    return { factor: best.factor, baseImgSize };
+    // Aucun facteur testé ne tient (contenu très dense) → plancher 0.30 pour minimiser le débordement.
+    return { factor: best.fits ? best.factor : 0.30, baseImgSize };
 }
 
 function rescaleCard(card) {
@@ -2126,6 +2107,7 @@ async function renderCardsToPrintLayout(mode = 'both') {
 
 async function exportPNG() {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
+    if (!window.html2canvas) { toast("Bibliothèque d'image non chargée (vérifiez votre connexion).", 'error', 5000); return; }
     busy(true, "Génération du PNG…");
     let layout = null;
     try {
@@ -2138,8 +2120,10 @@ async function exportPNG() {
         // Pré-générer tous les blobs avant toute interaction utilisateur
         const blobs = [];
         for (let i = 0; i < pages.length; i++) {
-            const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-            blobs.push(await new Promise(res => canvas.toBlob(res, 'image/png')));
+            const canvas = await window.html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+            const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+            if (!blob) throw new Error("Canvas vide ou trop volumineux (toBlob a renvoyé null).");
+            blobs.push(blob);
         }
         busy(false); // libérer le spinner avant la modal mobile
         // Single page : flux normal (modal mobile / download desktop)
@@ -2165,6 +2149,7 @@ async function exportPNG() {
 async function exportPDF(mode = 'both') {
     if (cards.length === 0) { toast("Aucune carte à exporter.", 'error'); return; }
     if (!window.jspdf) { toast("Bibliothèque PDF non chargée.", 'error'); return; }
+    if (!window.html2canvas) { toast("Bibliothèque d'image non chargée (vérifiez votre connexion).", 'error', 5000); return; }
     busy(true, "Génération du PDF…");
     let layout = null;
     try {
@@ -2173,7 +2158,7 @@ async function exportPDF(mode = 'both') {
         layout = await renderCardsToPrintLayout(mode);
         const { pages } = layout;
         for (let i = 0; i < pages.length; i++) {
-            const canvas = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+            const canvas = await window.html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
             const imgData = canvas.toDataURL('image/jpeg', 0.92);
             if (i > 0) pdf.addPage();
             pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
